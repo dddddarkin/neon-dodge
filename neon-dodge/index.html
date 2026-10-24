@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+    content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <title>NEON DODGE · 霓虹陨石</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud">
+    <div class="hud-item">
+      <span class="k">SCORE</span>
+      <span class="v" id="score">0</span>
+      <span class="k" id="lvTag" style="margin-top:9px;margin-bottom:0"></span>
+        <span class="k" id="matTag" style="margin-top:8px;margin-bottom:0"></span>
+      <div id="effects">
+        <span class="chip slow" id="chipSlow">减速 0.0</span>
+        <span class="chip mag" id="chipMag">磁铁 0.0</span>
+        <span class="chip dbl" id="chipDbl">双倍 0.0</span>
+      </div>
+    </div>
+    <div class="hud-item right">
+      <span class="k">BEST</span>
+      <span class="v dim" id="best">0</span>
+      <span id="bestName"></span>
+      <span class="k" style="margin-top:8px;margin-bottom:0" id="modeTag"></span>
+    </div>
+  </div>
+
+  <div id="comboWrap">
+    <div id="comboMult">×2</div>
+    <div class="combo-track">
+      <div id="comboFill"></div>
+    </div>
+  </div>
+
+  <div id="bottom">
+    <div class="dash-wrap">
+      <span class="dash-label">DASH</span>
+      <div class="dash-track">
+        <div class="dash-fill" id="dashFill"></div>
+      </div>
+      <span class="dash-txt" id="dashTxt">就绪</span>
+    </div>
+    <div class="shield-wrap">
+      <span class="k">护盾</span>
+      <span id="shieldTxt">—</span>
+      <span id="sndTxt" class="on">SFX</span>
+    </div>
+  </div>
+
+  <div id="upgrade">
+    <div class="up-inner">
+      <div class="up-head">系 统 升 级</div>
+      <div class="up-sub">选择一项强化</div>
+      <div class="up-cards" id="upCards"></div>
+      <div class="up-hint">点击卡片 或 按 1 / 2 / 3</div>
+    </div>
+  </div>
+
+  <div id="toastBox"></div>
+  <div id="overlay"></div>
+
+  <script src="game.js"></script>
+</body>
+
+</html>
