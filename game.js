@@ -661,14 +661,23 @@
         leadWave: 'triangle', arpWave: 'square', bassWave: 'sawtooth', chordWave: 'triangle',
         kick: 'normal', hat: 'offbeat',
         bassPat: [0, -1, 12, -1],
-        mel: [12, -1, -1, 15, -1, 19, -1, -1, 17, -1, 15, -1, -1, 12, -1, -1]
+        mel: [12, -1, -1, 15, -1, 19, -1, -1, 17, -1, 15, -1, -1, 12, -1, -1],
+        mels: [
+          [12, -1, -1, 15, -1, 19, -1, -1, 17, -1, 15, -1, -1, 12, -1, -1],
+          [19, -1, 17, -1, 15, -1, -1, 12, -1, 15, -1, 17, -1, 19, -1, -1],
+          [12, 15, -1, 19, -1, -1, 17, -1, 15, -1, 12, -1, 7, -1, -1, -1]
+        ]
       },
       {
         name: '深空回声', chordSet: 2, tempo: 0.82,
         leadWave: 'sine', arpWave: 'triangle', bassWave: 'sine', chordWave: 'sine',
         kick: 'sparse', hat: 'offbeat',
         bassPat: [0, -1, -1, 12],
-        mel: [-1, 12, -1, -1, 19, -1, -1, 15, -1, -1, 12, -1, 7, -1, -1, -1]
+        mel: [-1, 12, -1, -1, 19, -1, -1, 15, -1, -1, 12, -1, 7, -1, -1, -1],
+        mels: [
+          [-1, 12, -1, -1, 19, -1, -1, 15, -1, -1, 12, -1, 7, -1, -1, -1],
+          [-1, -1, 19, -1, -1, 12, -1, -1, 15, -1, -1, -1, 12, -1, 7, -1]
+        ]
       },
       {
         name: '工业碾核', chordSet: 3, tempo: 1.22,
@@ -841,6 +850,14 @@
       var section = Math.floor(bar32 / 8);      // 0 引子 / 1 主题 / 2 推进 / 3 高潮
       var barInSec = bar32 % 8;
 
+      // 每 4 小节（一个乐句）换一种变奏
+      var phrase = Math.floor(step / 64);
+      if (phrase !== bgm.phrase) {
+        bgm.phrase = phrase;
+        bgm.phraseVar = Math.floor(Math.random() * 4);
+      }
+      var pv = bgm.phraseVar || 0;
+
       var st = bgm.style || MUSIC_STYLES[0];
       var music = CHAPTER_MUSIC[st.chordSet % CHAPTER_MUSIC.length];
       var ci = (section >= 2) ? (Math.floor(step / 8) % 4) : (Math.floor(step / 16) % 4);
@@ -868,7 +885,8 @@
       var arpRate = (section === 0) ? 4 : (section >= 2 ? 1 : 2);
       if (bgm.level >= 1 && s16 % arpRate === 0) {
         var arpNotes = [chord.root, chord.root + chord.third, chord.root + chord.fifth, chord.root + 12];
-        var an = arpNotes[Math.floor(step / arpRate) % arpNotes.length];
+        var ai = Math.floor(step / arpRate);
+        var an = arpNotes[(pv === 2 ? (arpNotes.length - 1 - (ai % arpNotes.length)) : (ai % arpNotes.length))];
         var oct = (section >= 2) ? 12 : 0;
         bArp(t, 220 * pf * Math.pow(2, (an + oct + music.transpose) / 12), st.arpWave);
       }
@@ -885,15 +903,24 @@
       else if (section === 1) playMel = (barInSec % 2 === 0);
       else playMel = true;
       if (playMel) {
-        var mn = st.mel[s16];
+        var mels = st.mels || null;
+        var src = mels ? mels[pv % mels.length] : st.mel;
+        var mn = src[s16];
+        if (mn >= 0 && pv === 1) mn -= 12;                      // 变奏：低八度
+        if (mn >= 0 && pv === 2 && s16 % 8 >= 4) mn += 7;       // 变奏：后半句上行七度
+        if (mn >= 0 && pv === 3 && s16 % 2 === 1) mn = -1;      // 变奏：切碎
         if (mn >= 0) {
           var trans = music.transpose + melShift + ((section === 2 && s16 % 4 === 0) ? 7 : 0);
           bLead(t, 220 * pf * Math.pow(2, (mn + trans) / 12), STEP_DUR * (section === 0 ? 3.4 : 2.6), st.leadWave, bright);
         }
       }
 
+      // 乐句末尾：贝斯过门
+      if (pv >= 2 && s16 === 15) bBass(t, root * 2, STEP_DUR * 0.5, st.bassWave, bright);
+
       if (bgm.level >= 2 && (s16 === 0 || (section === 3 && s16 === 8))) bChord(t, root, chord, pf, st.chordWave);
 
+      if (barInSec === 7 && section >= 1 && s16 >= 12 && s16 % 2 === 0) bHat(t);
       if (s16 === 14 && barInSec === 7 && section >= 1) {
         bHat(t);
         if (section >= 2) bKick(t);
@@ -951,6 +978,7 @@
 
       ensureFx();
           bgm.style = musicPick(musicLast());
+          bgm.phrase = -1;
           bgm.pattern = 0;
           bgm.level = 0;
          bgm.step = 0;
@@ -970,6 +998,7 @@
         function bgmRestyle() {
           if (!bgm.on || !ac) return;
           bgm.style = musicPick(bgm.style ? bgm.style.name : '');
+          bgm.phrase = -1;
           bgm.tempo = bgm.style.tempo;
           bgm.step = 0;
           bgm.next = Math.max(bgm.next, ac.currentTime + 0.05);
@@ -1658,7 +1687,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.6.0';
+      verEl.textContent = 'v4.7.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
