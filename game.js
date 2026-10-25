@@ -92,6 +92,7 @@
     releaseShockwave(player.x, player.y, 170, 0);
     burst(player.x, player.y, '#ff2b3d', 34, 520);
     burst(player.x, player.y, '#ffffff', 12, 300);
+    game.burstCount = (game.burstCount || 0) + 1;
     Sound.dangerBurst();
     if (!game.dangerTaught) {
       game.dangerTaught = true;
@@ -101,7 +102,7 @@
   }
 
   /* ==================== 精英陨石词缀 ==================== */
-  var ELITES = ['split', 'swift', 'mag', 'shield'];
+  var ELITES = ['split', 'swift', 'mag', 'shield', 'bomb', 'drift'];
 
   function rollElite(m) {
     if (game.wave < 5) return;                                   // 第 1 章不出
@@ -402,7 +403,31 @@
         { id: 'score5000', name: '五千里程', desc: '单局得分达到 5000',
           icon: '<path d="M7 28a13 13 0 0 1 26 0"/><path d="M20 28l6-10"/><circle cx="20" cy="28" r="2.2" fill="currentColor" stroke="none"/><path d="M11 28h2M27 28h2"/>' },
         { id: 'clear', name: '通关者', desc: '完成 6 章主线',
-          icon: '<path d="M20 5l13 11-13 19L7 16z"/><path d="M7 16h26"/><path d="M20 5l-6 11 6 19 6-19z"/>' }
+          icon: '<path d="M20 5l13 11-13 19L7 16z"/><path d="M7 16h26"/><path d="M20 5l-6 11 6 19 6-19z"/>' },
+        { id: 'wave10', name: '深空行者', desc: '抵达第 10 波',
+          icon: '<path d="M20 6l10 22-10-6-10 6z"/>' },
+        { id: 'wave20', name: '越界者', desc: '抵达第 20 波',
+          icon: '<path d="M8 24l12-16 12 16"/><path d="M8 32h24"/>' },
+        { id: 'graze100', name: '贴面专家', desc: '单局擦身 100 次',
+          icon: '<circle cx="20" cy="20" r="7"/><circle cx="20" cy="20" r="13" stroke-dasharray="3 4"/>' },
+        { id: 'shatter60', name: '粉碎机械', desc: '单局击碎 60 颗陨石',
+          icon: '<path d="M10 30l8-20 6 10 6-6-2 16z"/><path d="M24 8l4 4"/>' },
+        { id: 'burst10', name: '过载狂人', desc: '单局触发 10 次危险值爆发',
+          icon: '<path d="M22 5L10 22h6l-2 13 12-18h-6z"/><path d="M7 34h26"/>' },
+        { id: 'elite20', name: '精英猎手', desc: '击杀 20 个精英陨石',
+          icon: '<path d="M20 6l4 9 9 1-7 6 2 9-8-4-8 4 2-9-7-6 9-1z"/>' },
+        { id: 'boss6', name: '六王讨伐', desc: '单局击败 6 只 Boss',
+          icon: '<circle cx="20" cy="14" r="6"/><circle cx="10" cy="28" r="5"/><circle cx="30" cy="28" r="5"/>' },
+        { id: 'mat300', name: '废土富翁', desc: '单局持有 300 材料',
+          icon: '<path d="M8 16h24v16H8z"/><path d="M8 21h24"/><circle cx="20" cy="27" r="3"/>' },
+        { id: 'parasite', name: '寄生清除', desc: '击败寄生体',
+          icon: '<circle cx="20" cy="20" r="10"/><circle cx="20" cy="20" r="4" fill="currentColor" stroke="none"/>' },
+        { id: 'mirror', name: '破镜者', desc: '击败镜像',
+          icon: '<path d="M20 6v28"/><path d="M8 10l8 10-8 10"/><path d="M32 10l-8 10 8 10"/>' },
+        { id: 'mod4', name: '模块化', desc: '单局装 4 个武器模组',
+          icon: '<path d="M8 8h10v10H8z M22 8h10v10H22z M8 22h10v10H8z M22 22h10v10H22z"/>' },
+        { id: 'unlocksAll', name: '完全体', desc: '解锁全部核心增益',
+          icon: '<path d="M20 6l12 6v10c0 8-6 12-12 14-6-2-12-6-12-14V12z"/><path d="M15 20l4 4 7-8"/>' }
 
       ];
 
@@ -1047,6 +1072,7 @@
       (game.lastGrade === 'S' ? 10 : (game.lastGrade === 'A' ? 6 : 0));
     s += Math.floor((game.mat || 0) / 20);   // 花不完的材料按 20:1 换成永久碎片
     s = Math.max(1, s);
+    if (getUnlocks().length >= UNLOCK_DEFS.length) unlock('unlocksAll');
     setShards(getShards() + s);
     return s;
   }
@@ -1396,7 +1422,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.2.0';
+      verEl.textContent = 'v4.3.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -1905,6 +1931,17 @@
           }
         }
 
+        if (m.elite) {
+          game.eliteKills = (game.eliteKills || 0) + 1;
+          if (m.elite === 'bomb') {
+            addFloater(m.x, m.y - m.r - 10, '自 爆', '#ff5c3d', 14);
+            burst(m.x, m.y, '#ff5c3d', 26, 380);
+            releaseShockwave(m.x, m.y, 130, 0);
+            game.shake = Math.max(game.shake || 0, 8);
+            if (hyp(m.x - player.x, m.y - player.y) < 130) damage();
+          }
+        }
+
         if (m.elite === 'split') {
           for (var spl = 0; spl < 2; spl++) {
             spawnMeteorAt(m.x + rand(-14, 14), m.y + rand(-6, 12), Math.max(9, m.r * 0.55), Math.abs(m.vy) * 0.9 + 40, 'rock');
@@ -2313,6 +2350,11 @@
 
           m.x += m.vx * wdt;
           m.y += m.vy * wdt;
+          if (m.elite === 'drift') {
+            var dsx = player.x - m.x;
+            m.vx += (dsx > 0 ? 1 : -1) * 34 * wdt;
+            m.vx = clamp(m.vx, -120, 120);
+          }
 
           if (m.teach && !m.teachShown && Math.abs(m.y - player.y) < 80) {
             m.teachShown = true;
@@ -2494,6 +2536,7 @@
 
   function spawnBoss() {
     var kind = bossKindByChapter();
+    game.lastBossKind = kind;
 
     var hp = (kind === 'final') ? 120 : 60;    var hp = 5;
     if (kind === 'twin') hp = 4;
@@ -3809,6 +3852,9 @@
     } else if (game.waveIsBoss) {
       var bg = game.waveDamaged ? 'A' : 'S';
       game.lastGrade = bg;
+      game.bossKills = (game.bossKills || 0) + 1;
+      if (game.lastBossKind === 'parasite') game.beatParasite = true;
+      if (game.lastBossKind === 'mirror') game.beatMirror = true;
       banner('B O S S 击 破 · ' + bg, gradeColor(bg));
       if (bg === 'S') Sound.milestone();
     } else {
@@ -4522,6 +4568,21 @@
       function checkAch() {
         if (game.time >= 60) unlock('survive60');
         if (game.score >= 5000) unlock('score5000');
+        if (game.wave >= 10) unlock('wave10');
+        if (game.wave >= 20) unlock('wave20');
+        if (game.grazes >= 100) unlock('graze100');
+        if (game.shatters >= 60) unlock('shatter60');
+        if ((game.burstCount || 0) >= 10) unlock('burst10');
+        if ((game.eliteKills || 0) >= 20) unlock('elite20');
+        if ((game.bossKills || 0) >= 6) unlock('boss6');
+        if (game.mat >= 300) unlock('mat300');
+        if (game.beatParasite) unlock('parasite');
+        if (game.beatMirror) unlock('mirror');
+        var modTotal = 0;
+        for (var wi = 0; wi < player.weapons.length; wi++) {
+          if (player.weapons[wi].mods) modTotal += player.weapons[wi].mods.length;
+        }
+        if (modTotal >= 4) unlock('mod4');
       }
 
       function update(dt) {
