@@ -69,7 +69,7 @@
   function dangerGainMul() {
     if (game.wave <= 4) return 1.4;
     if (game.wave <= 9) return 1.1;
-    return 0.9;
+    return 0.7;
   }
 
   function addDanger(v) {
@@ -1029,6 +1029,7 @@
     var s = Math.floor(game.wave * 2 + (game.totalKills || 0) * 0.08) +
       (game.cleared ? 60 : 0) +
       (game.lastGrade === 'S' ? 10 : (game.lastGrade === 'A' ? 6 : 0));
+    s += Math.floor((game.mat || 0) / 20);   // 花不完的材料按 20:1 换成永久碎片
     s = Math.max(1, s);
     setShards(getShards() + s);
     return s;
@@ -1377,7 +1378,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v3.2.0';
+      verEl.textContent = 'v3.3.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -1791,7 +1792,7 @@
         burst(m.x, m.y, m.color, 18, 330);
         burst(m.x, m.y, '#ffffff', 6, 190);
         
-        var dropN = m.tier === 0 ? randInt(4, 7) : 2;
+        var dropN = m.tier === 0 ? randInt(2, 4) : 2;
     for (var d = 0; d < dropN; d++) {
       materials.push({
         x: m.x + rand(-10, 10),
@@ -2712,10 +2713,77 @@
   var MAX_SLOTS = 4;
   var arcFx = [];
 
+  /* ==================== 武器模组（Lv.3 / Lv.5 二选一） ==================== */
+  var WEAPON_MODS = {
+    pulse: {
+      3: [
+        { id: 'twin', name: '双管模组', desc: '双发齐射，单发 -30%', color: '#39f6ff' },
+        { id: 'pierce', name: '穿甲模组', desc: '穿透 +1', color: '#8ef4ff' }
+      ],
+      5: [
+        { id: 'over', name: '过载模组', desc: '伤害 +40%', color: '#ff9ecb' },
+        { id: 'rapid', name: '急速模组', desc: '射速 +35%，伤害 -10%', color: '#5cff9d' }
+      ]
+    },
+    shotgun: {
+      3: [
+        { id: 'focus', name: '收束模组', desc: '弹道收窄，弹速 +25%', color: '#ffd166' },
+        { id: 'wide', name: '扩散模组', desc: '弹丸 +2，单发 -15%', color: '#ffb347' }
+      ],
+      5: [
+        { id: 'slug', name: '独头弹', desc: '单发重弹，伤害 ×2.2，穿透 +3', color: '#ff5c8a' },
+        { id: 'point', name: '贴面模组', desc: '伤害 +50%', color: '#ff9ecb' }
+      ]
+    },
+    arc: {
+      3: [
+        { id: 'chainp', name: '连锁模组', desc: '连锁 +2', color: '#a06bff' },
+        { id: 'reson', name: '共振模组', desc: '伤害 +35%', color: '#b9a6ff' }
+      ],
+      5: [
+        { id: 'storm', name: '风暴模组', desc: '连锁 +3 且伤害 +25%', color: '#c9b6ff' },
+        { id: 'surge', name: '涌动模组', desc: '放电间隔 -35%', color: '#8ef4ff' }
+      ]
+    },
+    laser: {
+      3: [
+        { id: 'through', name: '贯穿模组', desc: '穿透 +2', color: '#ff5c8a' },
+        { id: 'triple', name: '三连模组', desc: '三连发，单发 -45%', color: '#ff8fc4' }
+      ],
+      5: [
+        { id: 'heavy', name: '重炮模组', desc: '伤害 +60%，射速 -15%', color: '#ff2b3d' },
+        { id: 'quick', name: '速射模组', desc: '射速 +40%，伤害 -20%', color: '#ffb347' }
+      ]
+    }
+  };
+
+  function applyWeaponMods(w, st) {
+    if (!w.mods || !w.mods.length) return;
+    for (var i = 0; i < w.mods.length; i++) {
+      var id = w.mods[i].id;
+      if (id === 'twin') { st.pellets += 1; st.dmg *= 0.7; }
+      else if (id === 'pierce') { st.pierce += 1; }
+      else if (id === 'over') { st.dmg *= 1.4; }
+      else if (id === 'rapid') { st.interval *= 0.65; st.dmg *= 0.9; }
+      else if (id === 'focus') { st.spread *= 0.45; st.speed *= 1.25; }
+      else if (id === 'wide') { st.pellets += 2; st.dmg *= 0.85; }
+      else if (id === 'slug') { st.pellets = 1; st.spread = 0; st.dmg *= 2.2; st.pierce += 3; }
+      else if (id === 'point') { st.dmg *= 1.5; }
+      else if (id === 'chainp') { st.chain += 2; }
+      else if (id === 'reson') { st.dmg *= 1.35; }
+      else if (id === 'storm') { st.chain += 3; st.dmg *= 1.25; }
+      else if (id === 'surge') { st.interval *= 0.65; }
+      else if (id === 'through') { st.pierce += 2; }
+      else if (id === 'triple') { st.pellets += 2; st.dmg *= 0.55; }
+      else if (id === 'heavy') { st.dmg *= 1.6; st.interval *= 1.15; }
+      else if (id === 'quick') { st.interval *= 0.6; st.dmg *= 0.8; }
+    }
+  }
+
   function wStat(w) {
     var d = WEAPON_DEFS[w.type] || WEAPON_DEFS.pulse;
     var lv = w.lv || 1;
-    return {
+    var st = {
       name: d.name,
       color: d.color,
       range: d.range * (1 + 0.06 * (lv - 1)),
@@ -2727,6 +2795,8 @@
       chain: d.chain || 0,
       pierce: d.pierce || 0
     };
+    applyWeaponMods(w, st);
+    return st;
   }
 
   function hasWeapon(type) {
@@ -2832,13 +2902,17 @@
 
       if (w.type === 'shotgun') {
         for (var k = 0; k < st.pellets; k++) {
-          var off = (k - (st.pellets - 1) / 2) * (st.spread / st.pellets);
-          spawnBullet(p.x, p.y - 8, ang + off, st.speed, st.dmg, { r: 2.6, color: st.color });
+          var off = st.pellets > 1 ? (k - (st.pellets - 1) / 2) * (st.spread / st.pellets) : 0;
+          spawnBullet(p.x, p.y - 8, ang + off, st.speed, st.dmg, { r: 2.6, color: st.color, pierce: st.pierce });
         }
       } else if (w.type === 'laser') {
         spawnBullet(p.x, p.y - 10, ang, st.speed, st.dmg, { r: 2.2, color: st.color, pierce: st.pierce });
       } else {
-              spawnBullet(p.x, p.y - 10, ang, st.speed, st.dmg, { r: 3.4, color: st.color });
+        var pn = st.pellets || 1;
+        for (var pk2 = 0; pk2 < pn; pk2++) {
+          var poff = pn > 1 ? (pk2 - (pn - 1) / 2) * 0.10 : 0;
+          spawnBullet(p.x, p.y - 10, ang + poff, st.speed, st.dmg, { r: 3.4, color: st.color, pierce: st.pierce });
+        }
       }
 
       Sound.shoot(w.type);
@@ -3342,14 +3416,14 @@
       banner('B O S S 击 破 · ' + bg, gradeColor(bg));
       if (bg === 'S') Sound.milestone();
     } else {
-      game.mat += Math.round(8 * mutVal('matGain', 1));
+      game.mat += Math.round(6 * mutVal('matGain', 1));
 
       var g = waveGrade();
       var gBonus = (g === 'S') ? 12 : (g === 'A' ? 8 : (g === 'B' ? 4 : 0));
       game.mat += gBonus;
 
       game.lastGrade = g;
-      game.lastGain = 8 + gBonus;
+      game.lastGain = 6 + gBonus;
 
       banner(
         '第 ' + game.wave + ' 波 · ' + g +
@@ -3508,7 +3582,7 @@
           name: '新武器 · ' + d.name,
           desc: d.desc,
           color: d.color,
-          price: 22 + wave * 2
+          price: 22 + wave * 3
         });
       }
     }
@@ -3523,7 +3597,7 @@
         name: dd.name + ' 强化',
         desc: 'Lv.' + lv + ' → Lv.' + (lv + 1) + '　伤害 +45%',
         color: dd.color,
-        price: 16 + wave * 2 + lv * 4
+        price: 16 + wave * 3 + lv * 4
       });
     }
 
@@ -3539,11 +3613,49 @@
     pool.push({ kind: 'graze', name: '刀锋边缘', desc: '擦身得分 ×1.5', color: '#ff9ecb', price: 15 + wave });
     pool.push({ kind: 'shieldmax', name: '护盾扩容', desc: '护盾上限 +1', color: '#8ef4ff', price: 20 + wave * 2 });
 
+    // 武器模组：达到 Lv.3 / Lv.5 且该档未选过时，两个选项一起入池
+    for (var mi = 0; mi < player.weapons.length; mi++) {
+      var mw = player.weapons[mi];
+      var mlv = mw.lv || 1;
+      var tiers = WEAPON_MODS[mw.type];
+      if (!tiers) continue;
+      if (!mw.mods) mw.mods = [];
+      var tierList = [3, 5];
+      for (var tk = 0; tk < tierList.length; tk++) {
+        var need = tierList[tk];
+        if (mlv < need) continue;
+        var picked = false;
+        for (var pk = 0; pk < mw.mods.length; pk++) if (mw.mods[pk].t === need) picked = true;
+        if (picked) continue;
+        var opts = tiers[need];
+        for (var oi = 0; oi < opts.length; oi++) {
+          pool.push({
+            kind: 'mod', slot: mi, mod: opts[oi].id, tier: need,
+            name: opts[oi].name,
+            desc: WEAPON_DEFS[mw.type].name + ' · ' + opts[oi].desc,
+            color: opts[oi].color,
+            price: 20 + wave * 3 + need * 4
+          });
+        }
+      }
+    }
+
+    var modPool = [], otherPool = [];
+    for (var pi = 0; pi < pool.length; pi++) {
+      var it = pool[pi];
+      if (it.kind !== 'weapon' && it.kind !== 'upgrade' && it.kind !== 'mod') {
+        it.price = Math.round(it.price * 1.3);      // 通用道具整体涨价
+      }
+      if (it.kind === 'mod') modPool.push(it); else otherPool.push(it);
+    }
+
     var out = [];
-    var copy = pool.slice();
-    while (out.length < 3 && copy.length > 0) {
-      var idx = Math.floor(Math.random() * copy.length);
-      out.push(copy.splice(idx, 1)[0]);
+    if (modPool.length) out.push(modPool.splice(Math.floor(Math.random() * modPool.length), 1)[0]);
+    while (out.length < 4 && otherPool.length > 0) {
+      out.push(otherPool.splice(Math.floor(Math.random() * otherPool.length), 1)[0]);
+    }
+    while (out.length < 4 && modPool.length > 0) {
+      out.push(modPool.splice(Math.floor(Math.random() * modPool.length), 1)[0]);
     }
     return out;
   }
@@ -3764,6 +3876,12 @@
       player.mods.dmgMul = (player.mods.dmgMul || 1) * 1.12;
     } else if (o.kind === 'inertia') {
       player.mods.dashCdMul *= 0.75;
+    } else if (o.kind === 'mod') {
+      var mw2 = player.weapons[o.slot];
+      if (mw2) {
+        if (!mw2.mods) mw2.mods = [];
+        mw2.mods.push({ t: o.tier, id: o.mod });
+      }
     }
 
     game.shopOffers.splice(i, 1);
@@ -5656,7 +5774,7 @@
     if ($shieldTxt.textContent !== stxt) $shieldTxt.textContent = stxt;
     $shieldTxt.classList.toggle('on', player.shield > 0);
 
-       var lvTxt = game.upgradeLevel > 0 ? '强化 Lv.' + game.upgradeLevel : '';
+       var lvTxt = '';
     if ($lvTag.textContent !== lvTxt) $lvTag.textContent = lvTxt;
 
     var mtxt = '材料 ' + game.mat;
