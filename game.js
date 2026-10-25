@@ -535,12 +535,13 @@
         }
 
         /* ---- BGM 乐器 ---- */
-        function bBass(t, freq, dur, wave) {
+        function bBass(t, freq, dur, wave, bright) {
           if (!ac || muted) return;
           var o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
+          var br = bright || 1;
           f.type = 'lowpass';
-          f.frequency.setValueAtTime(620, t);
-          f.frequency.exponentialRampToValueAtTime(180, t + dur * 0.8);
+          f.frequency.setValueAtTime(620 * br, t);
+          f.frequency.exponentialRampToValueAtTime(180 * br, t + dur * 0.8);
           f.Q.value = 6;
           o.type = wave || 'sawtooth';
           o.frequency.setValueAtTime(freq, t);
@@ -696,6 +697,27 @@
         kick: 'dense', hat: 'dense',
         bassPat: [0, 1, 12, 10],
         mel: [12, 13, -1, 15, -1, 14, 12, -1, 19, -1, 17, 15, -1, 14, -1, 12]
+      },
+      {
+        name: '氛围空间', chordSet: 2, tempo: 0.7,
+        leadWave: 'sine', arpWave: 'sine', bassWave: 'sine', chordWave: 'sine', bright: 0.7,
+        kick: 'sparse', hat: 'none',
+        bassPat: [0, -1, -1, -1],
+        mel: [-1, -1, 12, -1, -1, -1, 19, -1, -1, -1, 15, -1, -1, 12, -1, -1]
+      },
+      {
+        name: '碎拍切割', chordSet: 3, tempo: 1.3,
+        leadWave: 'square', arpWave: 'sawtooth', bassWave: 'square', chordWave: 'square', bright: 1.15,
+        kick: 'break', hat: 'dense',
+        bassPat: [0, -1, -1, 12, -1, 0, -1, -1, 7, -1, 12, -1, -1, 5, -1, -1],
+        mel: [15, -1, 12, -1, 17, -1, 15, 12, -1, 19, -1, 15, -1, 12, -1, -1]
+      },
+      {
+        name: '霓虹迪斯科', chordSet: 1, tempo: 1.16,
+        leadWave: 'triangle', arpWave: 'square', bassWave: 'sawtooth', chordWave: 'triangle',
+        kick: 'four', hat: 'dense',
+        bassPat: [0, -1, 12, -1],
+        mel: [19, -1, 19, -1, 15, -1, 17, -1, 19, -1, 22, -1, 19, 15, -1, -1]
       }
     ];
 
@@ -756,7 +778,7 @@
       }
     }
 
-    function bLead(t, freq, dur, wave) {
+    function bLead(t, freq, dur, wave, bright) {
       if (!ac || muted) return;
 
       var o = ac.createOscillator();
@@ -764,7 +786,7 @@
       var g = ac.createGain();
 
       f.type = 'lowpass';
-      f.frequency.setValueAtTime(2800, t);
+      f.frequency.setValueAtTime(2800 * (bright || 1), t);
       f.Q.value = 1;
 
       o.type = wave || 'triangle';
@@ -815,57 +837,66 @@
 
     function playStep(step, t) {
       var s16 = step % 16;
-      var bar = Math.floor(step / 16) % 8;
-      var ci = bar % 4;
+      var bar32 = Math.floor(step / 16) % 32;
+      var section = Math.floor(bar32 / 8);      // 0 引子 / 1 主题 / 2 推进 / 3 高潮
+      var barInSec = bar32 % 8;
 
       var st = bgm.style || MUSIC_STYLES[0];
       var music = CHAPTER_MUSIC[st.chordSet % CHAPTER_MUSIC.length];
+      var ci = (section >= 2) ? (Math.floor(step / 8) % 4) : (Math.floor(step / 16) % 4);
       var chord = music.chords[ci];
 
       var pf = Math.pow(2, bgm.pitch / 12);
       var root = 110 * pf * Math.pow(2, (chord.root + music.transpose) / 12);
+      var bright = [0.55, 1, 1.3, 1.65][section] * (st.bright || 1);
 
-      // 鼓
-      if (st.kick === 'dense') {
-        if (s16 % 4 === 0) bKick(t);
-      } else if (st.kick === 'sparse') {
-        if (s16 === 0) bKick(t);
-      } else {
-        if (s16 % 8 === 0) bKick(t);
+      var kickOn = false;
+      if (st.kick === 'dense' || st.kick === 'four') kickOn = (s16 % 4 === 0);
+      else if (st.kick === 'sparse') kickOn = (s16 === 0);
+      else if (st.kick === 'break') kickOn = (s16 === 3 || s16 === 10 || s16 === 14);
+      else kickOn = (s16 % 8 === 0);
+      if (section === 0) kickOn = kickOn && (s16 % 8 === 0);
+      if (section === 3 && st.kick !== 'break') kickOn = kickOn || s16 === 14;
+      if (kickOn) bKick(t);
+
+      var bs = (st.bassPat.length === 16) ? st.bassPat[s16] : st.bassPat[s16 % 4];
+      if (bs >= 0) {
+        var boct = (section === 3) ? 12 : 0;
+        bBass(t, root * Math.pow(2, (bs + boct) / 12), STEP_DUR * (section === 0 ? 2.4 : 1.8), st.bassWave, bright);
       }
 
-      // 贝斯
-      var bs = st.bassPat[s16 % 4];
-      if (bs >= 0) bBass(t, root * Math.pow(2, bs / 12), STEP_DUR * 1.8, st.bassWave);
-
-      // 琶音
-      if (bgm.level >= 1 && s16 % 2 === 0) {
+      var arpRate = (section === 0) ? 4 : (section >= 2 ? 1 : 2);
+      if (bgm.level >= 1 && s16 % arpRate === 0) {
         var arpNotes = [chord.root, chord.root + chord.third, chord.root + chord.fifth, chord.root + 12];
-        var an = arpNotes[Math.floor(step / 2) % arpNotes.length];
-        var oct = (bar >= 4) ? 12 : 0;
+        var an = arpNotes[Math.floor(step / arpRate) % arpNotes.length];
+        var oct = (section >= 2) ? 12 : 0;
         bArp(t, 220 * pf * Math.pow(2, (an + oct + music.transpose) / 12), st.arpWave);
       }
 
-      // 镨
       if (st.hat === 'dense') {
-        if (bgm.level >= 1 || s16 % 2 === 1) bHat(t);
-      } else if (bgm.level >= 2 && s16 % 2 === 1) {
-        bHat(t);
+        if (s16 % 2 === 1 || section >= 2) bHat(t);
+      } else if (st.hat === 'offbeat') {
+        if (bgm.level >= 2 && s16 % 2 === 1) bHat(t);
       }
-      if (bgm.level >= 2 && bar === 7 && s16 % 2 === 0) bHat(t);
+      if (st.hat !== 'none' && section >= 2 && s16 === 15) bHat(t);
 
-      // 主旋律
-      if (bar < 4 && bar % 2 === 0) {
+      var playMel = false, melShift = 0;
+      if (section === 0) playMel = (barInSec % 4 === 0);
+      else if (section === 1) playMel = (barInSec % 2 === 0);
+      else playMel = true;
+      if (playMel) {
         var mn = st.mel[s16];
         if (mn >= 0) {
-          var trans = music.transpose + ((bar === 2) ? 2 : 0);
-          bLead(t, 220 * pf * Math.pow(2, (mn + trans) / 12), STEP_DUR * 2.6, st.leadWave);
+          var trans = music.transpose + melShift + ((section === 2 && s16 % 4 === 0) ? 7 : 0);
+          bLead(t, 220 * pf * Math.pow(2, (mn + trans) / 12), STEP_DUR * (section === 0 ? 3.4 : 2.6), st.leadWave, bright);
         }
       }
 
-      if (bgm.level >= 3) {
-        if (s16 === 0) bChord(t, root, chord, pf, st.chordWave);
-        if (s16 % 4 === 2) bHat(t);
+      if (bgm.level >= 2 && (s16 === 0 || (section === 3 && s16 === 8))) bChord(t, root, chord, pf, st.chordWave);
+
+      if (s16 === 14 && barInSec === 7 && section >= 1) {
+        bHat(t);
+        if (section >= 2) bKick(t);
       }
     }
 
@@ -904,7 +935,7 @@
           var guard = 0;
           while (bgm.next < now + look && guard < 32) {
             playStep(bgm.step, bgm.next);
-                    bgm.step = (bgm.step + 1) % 128;
+                    bgm.step = (bgm.step + 1) % 512;
                     bgm.next += STEP_DUR / (bgm.tempo || 1);
             guard++;
           }
@@ -1058,7 +1089,8 @@
           bgmResume: bgmResume,
           setBgmLevel: function (n) { bgm.level = n; },
           setBgmTempo: function (tempo, pitch) {
-        bgm.tempo = tempo || 1;
+        var base = bgm.style ? bgm.style.tempo : 1;
+        bgm.tempo = base * (tempo || 1);
         bgm.pitch = pitch || 0;
       }
         };
@@ -1626,7 +1658,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.5.0';
+      verEl.textContent = 'v4.6.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
