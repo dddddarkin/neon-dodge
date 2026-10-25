@@ -1068,7 +1068,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v2.4.0';
+      verEl.textContent = 'v2.4.1';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -3229,13 +3229,17 @@
       rf.id = 'shopRefresh';
       rf.className = 'btn ghost';
       rf.style.marginTop = '0';
+      rf.style.padding = '13px 22px';
       rf.addEventListener('click', refreshShop);
       foot.appendChild(rf);
     }
     var rc = refreshCost();
     var canPay = game.debugFreeShop || game.mat >= rc;
-    rf.textContent = '刷 新 · ' + rc;
-    rf.style.opacity = canPay ? '1' : '0.42';
+    rf.innerHTML = '刷 新 <b style="color:' +
+      (canPay ? 'rgba(92,255,157,.95)' : 'rgba(255,95,95,.9)') +
+      '">' + rc + ' 材料</b>';
+    rf.style.opacity = canPay ? '1' : '0.58';
+    rf.title = '花 ' + rc + ' 材料重掷三张卡';
 
     var cont = document.getElementById('shopContinue');
     if (!cont) {
@@ -4401,6 +4405,11 @@
       var inR = R * (0.16 + open * 0.38);
       var outR = R * 0.98;
       var halfA = (Math.PI / 8) * 0.92;
+      // 渐变只建一次：每片刀叶局部坐标系相同，绘制时随 CTM 旋转即可
+      var bladeGrad = ctx.createLinearGradient(inR, 0, outR, 0);
+      bladeGrad.addColorStop(0, 'rgba(96,16,32,' + (0.96 * ease).toFixed(3) + ')');
+      bladeGrad.addColorStop(0.55, 'rgba(52,8,20,' + (0.94 * ease).toFixed(3) + ')');
+      bladeGrad.addColorStop(1, 'rgba(24,2,8,' + (0.9 * ease).toFixed(3) + ')');
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate((1 - ease) * 0.5);
@@ -4411,11 +4420,7 @@
         ctx.arc(0, 0, outR, -halfA, halfA);
         ctx.arc(0, 0, inR, halfA, -halfA, true);
         ctx.closePath();
-        var bg2 = ctx.createLinearGradient(inR, 0, outR, 0);
-        bg2.addColorStop(0, 'rgba(96,16,32,' + (0.96 * ease).toFixed(3) + ')');
-        bg2.addColorStop(0.55, 'rgba(52,8,20,' + (0.94 * ease).toFixed(3) + ')');
-        bg2.addColorStop(1, 'rgba(24,2,8,' + (0.9 * ease).toFixed(3) + ')');
-        ctx.fillStyle = bg2;
+        ctx.fillStyle = bladeGrad;
         ctx.fill();
         ctx.strokeStyle = 'rgba(255,96,126,' + (0.5 * ease).toFixed(3) + ')';
         ctx.lineWidth = 1.5;
