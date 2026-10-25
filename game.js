@@ -1389,9 +1389,75 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v3.3.1';
-      verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
+      verEl.id = 'verEl';
+      verEl.textContent = 'v3.4.0';
+      verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
+
+      /* ==================== 手机端暗号入口（连点版本号） ==================== */
+      var DEBUG_PASS = '080825';
+      var DEBUG_UNLOCK_KEY = 'neonDodgeDebug';
+      var verTapN = 0, verTapTimer = null;
+
+      function debugUnlocked() {
+        try { return localStorage.getItem(DEBUG_UNLOCK_KEY) === '1'; } catch (e) { return false; }
+      }
+
+      function enableDebugPanel() {
+        game.debug = true;
+        var el = document.getElementById('dbgPanel');
+        if (el) { el.style.display = 'block'; document.body.appendChild(el); }
+        debugSync();
+        toast('调 试 模 式 开 启');
+      }
+
+      function openPassGate() {
+        if (document.getElementById('passGate')) return;
+        var wrap = document.createElement('div');
+        wrap.id = 'passGate';
+        wrap.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:rgba(2,6,14,.86);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px);';
+        wrap.innerHTML = '<div style="width:min(300px,78vw);padding:22px 20px;border-radius:16px;background:rgba(8,18,30,.97);border:1px solid rgba(57,246,255,.4);box-shadow:0 0 40px rgba(57,246,255,.25);text-align:center;">' +
+          '<div style="font-size:12px;letter-spacing:.4em;color:rgba(57,246,255,.9);margin-bottom:14px;">暗 号</div>' +
+          '<input id="passInput" inputmode="numeric" pattern="[0-9]*" maxlength="8" style="width:100%;box-sizing:border-box;padding:12px;border-radius:10px;background:rgba(2,8,16,.9);border:1px solid rgba(57,246,255,.35);color:#d8f6ff;font-size:20px;letter-spacing:.4em;text-align:center;outline:none;">' +
+          '<div id="passMsg" style="height:16px;font-size:11px;color:#ff5c8a;margin-top:8px;"></div>' +
+          '<div style="display:flex;gap:10px;margin-top:8px;">' +
+          '<button id="passCancel" style="flex:1;padding:11px;border-radius:10px;background:transparent;border:1px solid rgba(160,210,235,.35);color:#bfe9ff;font:inherit;font-size:13px;">取 消</button>' +
+          '<button id="passOk" style="flex:1;padding:11px;border-radius:10px;background:rgba(57,246,255,.14);border:1px solid rgba(57,246,255,.5);color:#d8f6ff;font:inherit;font-size:13px;">确 定</button>' +
+          '</div></div>';
+        document.body.appendChild(wrap);
+        var input = document.getElementById('passInput');
+        setTimeout(function () { input.focus(); }, 80);
+
+        function closeGate() { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }
+        function submit() {
+          if (input.value.trim() === DEBUG_PASS) {
+            try { localStorage.setItem(DEBUG_UNLOCK_KEY, '1'); } catch (e) { }
+            closeGate();
+            enableDebugPanel();
+          } else {
+            document.getElementById('passMsg').textContent = '暗 号 错 误';
+            input.value = '';
+            input.focus();
+          }
+        }
+        document.getElementById('passOk').addEventListener('click', submit);
+        document.getElementById('passCancel').addEventListener('click', closeGate);
+        input.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') submit(); });
+        wrap.addEventListener('pointerdown', function (ev) { ev.stopPropagation(); });
+      }
+
+      verEl.addEventListener('pointerdown', function (ev) {
+        ev.stopPropagation();
+        verTapN++;
+        if (verTapTimer) clearTimeout(verTapTimer);
+        verTapTimer = setTimeout(function () { verTapN = 0; }, 1800);
+        var need = debugUnlocked() ? 3 : 5;
+        if (verTapN >= need) {
+          verTapN = 0;
+          if (debugUnlocked()) enableDebugPanel();
+          else openPassGate();
+        }
+      });
 
       var execBtn = document.createElement('div');
       execBtn.style.cssText = 'position:fixed;right:26px;bottom:96px;width:104px;height:104px;border-radius:50%;display:none;align-items:center;justify-content:center;z-index:80;cursor:pointer;background:radial-gradient(circle at 50% 42%, rgba(255,60,90,.95), rgba(120,0,20,.92) 62%, rgba(30,0,6,.96));box-shadow:0 0 24px rgba(255,40,80,.75), inset 0 0 26px rgba(255,120,140,.35);border:2px solid #ff3b5c;color:#fff;font-size:40px;font-weight:700;letter-spacing:.08em;text-shadow:0 0 12px rgba(255,120,150,.95);touch-action:manipulation;-webkit-tap-highlight-color:transparent;user-select:none;';
@@ -6225,7 +6291,7 @@
       'max-height:88vh;overflow-y:auto;';
 
     var title = document.createElement('div');
-    title.textContent = 'DEBUG  按 ` 关闭';
+    title.textContent = 'DEBUG';
     title.style.cssText = 'font-weight:700;color:#39f6ff;margin-bottom:8px;';
     wrap.appendChild(title);
 
@@ -6250,6 +6316,8 @@
       wrap.appendChild(b);
       return b;
     }
+
+    addBtn('关 闭 面 板', null, function () { wrap.style.display = 'none'; });
 
     addBtn('材料 +500', null, function () { game.mat += 500; });
 
