@@ -929,12 +929,22 @@
       /* ==================== 提示气泡 ==================== */
       var toastBox = document.getElementById('toastBox');
       function toast(msg) {
+        // 菜单/结算界面：提示移到顶部，避免压住底部按钮
+        var inMenu = overlay.classList.contains('show');
+        toastBox.style.top = inMenu ? '10px' : 'auto';
+        toastBox.style.bottom = inMenu ? 'auto' : '76px';
         var el = document.createElement('div');
         el.className = 'toast';
         el.textContent = msg;
         toastBox.appendChild(el);
         setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2600);
       }
+
+  function setToastZone(menu) {
+    if (!toastBox) return;
+    toastBox.style.top = menu ? '10px' : 'auto';
+    toastBox.style.bottom = menu ? 'auto' : '76px';
+  }
 
       /* ==================== 日期 / 排行榜 ==================== */
       function todayKey() {
@@ -1096,6 +1106,7 @@
       '<button class="btn ghost small" id="coreBack" style="margin-top:14px">‹ 返 回 首 页</button>';
 
     overlay.classList.add('show');
+    setToastZone(true);
 
     var btns = overlay.querySelectorAll('[data-core]');
     for (var k = 0; k < btns.length; k++) {
@@ -1378,7 +1389,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v3.3.0';
+      verEl.textContent = 'v3.3.1';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -5816,6 +5827,7 @@
 
 
     overlay.classList.add('show');
+    setToastZone(true);
     document.getElementById('startBtn').addEventListener('click', function () { startGame(false); });
         document.getElementById('dailyBtn').addEventListener('click', function () { startGame(true); });
     document.getElementById('achBtn').addEventListener('click', showAchievements);
@@ -5861,6 +5873,7 @@
       '<button class="btn ghost small" id="achBack" style="margin-top:14px">‹ 返 回 首 页</button>';
 
     overlay.classList.add('show');
+    setToastZone(true);
     document.getElementById('achBack').addEventListener('click', closeAchievements);
   }
 
@@ -5900,6 +5913,7 @@
 
     overlay.innerHTML = html;
     overlay.classList.add('show');
+    setToastZone(true);
 
     document.getElementById('victoryBtn').addEventListener('click', closeVictory);
   }
@@ -5932,7 +5946,7 @@
       '<span>最高倍率 <b>×' + game.maxMult + '</b></span>' +
       '</div>';
     html += '<div class="stats" style="margin-top:8px">' +
-      '<span>强化 <b>Lv.' + game.upgradeLevel + '</b></span>' +
+      '<span>核心碎片 <b>+' + (game.lastShards || 0) + '</b></span>' +
       '<span>成就 <b>' + achCount() + '/' + ACH_LIST.length + '</b></span>' +
       '</div>';
 
@@ -5952,6 +5966,7 @@
 
     overlay.innerHTML = html;
     overlay.classList.add('show');
+    setToastZone(true);
 
     document.getElementById('startBtn').addEventListener('click', function () { startGame(game.daily); });
     document.getElementById('menuBtn').addEventListener('click', function () {
@@ -6099,6 +6114,7 @@
     $modeTag.classList.toggle('small', isDaily);
 
     hideOverlay();
+    setToastZone(false);
     refreshBestName();
     updateHUD();
         lastTime = 0;
@@ -6154,8 +6170,7 @@
       $best.textContent = String(game.best);
     }
 
-    var earnedShards = grantShards();
-    toast('核 心 碎 片 +' + earnedShards);
+    game.lastShards = grantShards();
 
     pendingEntry = qualifiesEntry(s);
 
