@@ -1396,7 +1396,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.0.0';
+      verEl.textContent = 'v4.0.1';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -2866,8 +2866,8 @@
       dmg: 9, speed: 2200, pierce: 3, desc: '高速穿透，射速很慢'
     },
     boomerang: {
-      name: '回旋刃', color: '#7fffd4', range: 330, interval: 0.9,
-      dmg: 4, speed: 760, pierce: 99, bulletR: 7, desc: '投出后折返，往返各命中一次'
+      name: '回旋刃', color: '#7fffd4', range: 190, interval: 0.9,
+      dmg: 5, speed: 760, pierce: 99, bulletR: 7, desc: '投出后折返，回程伤害 +40%'
     },
     shock: {
       name: '震波炮', color: '#ffb347', range: 195, interval: 0.95,
@@ -3182,7 +3182,7 @@
         var rr = m.hitR + b.r;
         if (dist2(m.x, m.y, b.x, b.y) < rr * rr) {
           b.hits.push(m);
-          damageMeteor(j, b.dmg);
+          damageMeteor(j, b.back ? b.dmg * 1.4 : b.dmg);
                     if (b.pierce > 0) {
             b.pierce -= 1;
           } else {
