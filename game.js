@@ -984,7 +984,124 @@
         return top;
       }
 
-      function boardHTML(list) {
+      /* ==================== 核心碎片 · 局外成长 ==================== */
+  var SHARD_KEY = 'neonDodgeShards';
+  var UNLOCK_KEY = 'neonDodgeUnlocks';
+
+  var UNLOCK_DEFS = [
+    { id: 'slot', name: '备用挂架', desc: '开局多一把武器', cost: 40 },
+    { id: 'reserve', name: '废料储备', desc: '开局材料 +15', cost: 50 },
+    { id: 'armor', name: '应急装甲', desc: '开局护盾 +1', cost: 60 },
+    { id: 'greed', name: '贪婪之眼', desc: '材料拾取 +1', cost: 70 },
+    { id: 'blood', name: '血脉记忆', desc: '开局危险值 30', cost: 80 },
+    { id: 'speed', name: '疾风推进', desc: '移动速度 +5%', cost: 90 },
+    { id: 'edge', name: '刀刃本能', desc: '擦身充能 +25%', cost: 110 },
+    { id: 'fusion', name: '核裂变', desc: '爆发时长 +0.5 秒', cost: 150 }
+  ];
+
+  function getShards() {
+    try { return parseInt(localStorage.getItem(SHARD_KEY), 10) || 0; } catch (e) { return 0; }
+  }
+  function setShards(v) {
+    try { localStorage.setItem(SHARD_KEY, String(Math.max(0, Math.floor(v)))); } catch (e) { }
+  }
+  function getUnlocks() {
+    try {
+      var r = JSON.parse(localStorage.getItem(UNLOCK_KEY) || '[]');
+      return Array.isArray(r) ? r : [];
+    } catch (e) { return []; }
+  }
+  function saveUnlocks(a) {
+    try { localStorage.setItem(UNLOCK_KEY, JSON.stringify(a)); } catch (e) { }
+  }
+  function hasUnlock(id) { return getUnlocks().indexOf(id) >= 0; }
+  function hasPerk(id) { return !!(game.unl && game.unl.indexOf(id) >= 0); }
+
+  function grantShards() {
+    var s = Math.floor(game.wave * 2 + (game.totalKills || 0) * 0.08) +
+      (game.cleared ? 60 : 0) +
+      (game.lastGrade === 'S' ? 10 : (game.lastGrade === 'A' ? 6 : 0));
+    s = Math.max(1, s);
+    setShards(getShards() + s);
+    return s;
+  }
+
+  function buyUnlock(id) {
+    var def = null;
+    for (var i = 0; i < UNLOCK_DEFS.length; i++) if (UNLOCK_DEFS[i].id === id) def = UNLOCK_DEFS[i];
+    if (!def || hasUnlock(id)) return false;
+    var sh = getShards();
+    if (sh < def.cost) { Sound.shieldBreak(); return false; }
+    setShards(sh - def.cost);
+    var list = getUnlocks();
+    list.push(id);
+    saveUnlocks(list);
+    Sound.choose();
+    return true;
+  }
+
+  function applyUnlocks() {
+    game.unl = getUnlocks();
+    BURST_DUR = hasPerk('fusion') ? 3.5 : 3;
+
+    if (hasPerk('slot')) {
+      var pool = [];
+      for (var i = 0; i < WEAPON_KEYS.length; i++) {
+        if (!hasWeapon(WEAPON_KEYS[i])) pool.push(WEAPON_KEYS[i]);
+      }
+      if (pool.length) player.weapons.push({ type: pick(pool), lv: 1 });
+    }
+    if (hasPerk('armor')) {
+      player.mods.shieldMax += 1;
+      player.shield = Math.min(player.mods.shieldMax, player.shield + 1);
+    }
+    if (hasPerk('speed')) player.mods.speedMul *= 1.05;
+    if (hasPerk('reserve')) game.mat += 15;
+    if (hasPerk('blood')) game.danger = 30;
+  }
+
+  function showCoreShop() {
+    var sh = getShards();
+    var rows = '';
+    for (var i = 0; i < UNLOCK_DEFS.length; i++) {
+      var d = UNLOCK_DEFS[i];
+      var owned = hasUnlock(d.id);
+      var can = sh >= d.cost;
+      var meta = owned
+        ? '<span class="ach-badge">已 解 锁</span>'
+        : '<button class="btn ghost small" data-core="' + d.id + '" style="margin:0;padding:6px 12px;font-size:11px;opacity:' + (can ? '1' : '.45') + '">' + d.cost + ' 碎片</button>';
+      rows += '<div class="ach-row' + (owned ? ' on' : '') + '">' +
+        '<div class="ach-body">' +
+          '<div class="ach-name">' + d.name + '</div>' +
+          '<div class="ach-desc">' + d.desc + '</div>' +
+        '</div>' +
+        '<div class="ach-meta">' + meta + '</div>' +
+      '</div>';
+    }
+
+    overlay.innerHTML =
+      '<p class="over-label">核 心 仓 库</p>' +
+      '<div class="ach-count"><b>' + sh + '</b> 碎片</div>' +
+      '<p class="sub2" style="margin:6px 0 2px;font-size:11px;color:rgba(160,210,235,.6)">每局结束按 波数 + 击杀 + 评级 结算，永久累积</p>' +
+      '<div class="ach-list">' + rows + '</div>' +
+      '<button class="btn ghost small" id="coreBack" style="margin-top:14px">‹ 返 回 首 页</button>';
+
+    overlay.classList.add('show');
+
+    var btns = overlay.querySelectorAll('[data-core]');
+    for (var k = 0; k < btns.length; k++) {
+      btns[k].addEventListener('click', function (ev) {
+        ev.stopPropagation();
+        if (buyUnlock(this.getAttribute('data-core'))) { Sound.levelUp(); showCoreShop(); }
+      });
+    }
+    document.getElementById('coreBack').addEventListener('click', function () {
+      Sound.choose();
+      showMenu();
+    });
+  }
+
+  function boardHTML(list) {
         if (!list || !list.length) return '<div class="lb-empty">暂 无 记 录</div>';
         var medals = ['①', '②', '③', '④', '⑤'];
         var h = '';
@@ -1252,7 +1369,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v3.0.0';
+      verEl.textContent = 'v3.1.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -2757,7 +2874,7 @@
           var rr = s.r + player.r + 22;
       if (dist2(s.x, s.y, player.x, player.y) < rr * rr) {
         materials.splice(i, 1);
-        game.mat += 1;
+        game.mat += 1 + (hasPerk('greed') ? 1 : 0);
         addCombo(1);
         addScore(4);
         burst(s.x, s.y, '#7fffd4', 6, 120);
@@ -3612,7 +3729,7 @@
           if (d2 < grazeR * grazeR && m.grazeCd <= 0 && p.invuln <= 0) {
             m.grazeCd = 0.4;
             game.grazes++;
-            addDanger(7);
+            addDanger(7 * (hasPerk('edge') ? 1.25 : 1));
             addCombo(1);
             addScore(10 * getMult() * mods.grazeMul);
             game.flash = Math.max(game.flash, 0.1);
@@ -5447,6 +5564,7 @@
       '<button class="btn" id="startBtn">开 始 游 戏</button>' +
       '<button class="btn ghost" id="dailyBtn">每 日 挑 战 · ' + todayMod().name + (dbest > 0 ? '　最佳 ' + dbest : '') + '</button>' +
       '<div class="lb"><div class="lb-title">本 机 前 五</div>' + boardHTML(board) + '</div>' +
+            '<button class="ach-line ach-entry" id="coreBtn">核 心 仓 库 <b>' + getShards() + '</b><span class="ach-arrow">›</span></button>' +
             '<button class="ach-line ach-entry" id="achBtn">成 就 <b>' + achCount() + ' / ' + ACH_LIST.length + '</b><span class="ach-arrow">›</span></button>' +
       '<p class="tip">空格 开始　·　M 静音　·　P 暂停 / 查看属性</p>';
 
@@ -5455,6 +5573,7 @@
     document.getElementById('startBtn').addEventListener('click', function () { startGame(false); });
         document.getElementById('dailyBtn').addEventListener('click', function () { startGame(true); });
     document.getElementById('achBtn').addEventListener('click', showAchievements);
+    document.getElementById('coreBtn').addEventListener('click', showCoreShop);
   }
 
     function showAchievements() {
@@ -5757,6 +5876,7 @@
     game.lastGrade = '';
 
     game.shopOffers = [];
+    applyUnlocks();
     startWave();
     if (game.mut) {
       banner('今 日 · ' + game.mut.name, '#b9a6ff');
@@ -5786,6 +5906,9 @@
       }
       $best.textContent = String(game.best);
     }
+
+    var earnedShards = grantShards();
+    toast('核 心 碎 片 +' + earnedShards);
 
     pendingEntry = qualifiesEntry(s);
 

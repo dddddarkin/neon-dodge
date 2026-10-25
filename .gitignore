@@ -7,3 +7,4 @@ _api_*.js
 worker/node_modules/
 worker/.wrangler/
 *.log
+*.err
