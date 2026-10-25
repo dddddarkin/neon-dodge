@@ -1068,7 +1068,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v2.4.1';
+      verEl.textContent = 'v2.5.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -1659,6 +1659,36 @@
       }
 
       /* ==================== 实体更新 ==================== */
+      /* ===== 首次教学：一颗不会伤人的陨石从旁边擦过，亲眼看到 ×1.5 ===== */
+      function taughtAlready() {
+        try { return !!localStorage.getItem('neonDodgeTaught'); } catch (e) { return false; }
+      }
+
+      function markTaught() {
+        try { localStorage.setItem('neonDodgeTaught', '1'); } catch (e) { }
+      }
+
+      function spawnTeachMeteor() {
+        var off = (player.x > W - 110) ? -62 : 62;          // 贴右墙时改从左边擦过
+        var tx = clamp(player.x + off, 70, W - 70);
+        var m = makeMeteor(tx, -50, 17, 0, 320, 'rock');
+        m.teach = true;
+        m.teachShown = false;
+        m.color = '#ffd166';
+        m.hp = 99999;
+        m.maxHp = 99999;
+        meteors.push(m);
+      }
+
+      function updateTeach(dt) {
+        if (game.teachDone) return;
+        if (game.mode !== 'play' || game.wave !== 1 || game.time < 3) return;
+        game.teachDone = true;
+        if (taughtAlready()) return;
+        markTaught();
+        spawnTeachMeteor();
+      }
+
       function updateMeteors(wdt) {
         for (var i = meteors.length - 1; i >= 0; i--) {
           var m = meteors[i];
@@ -1687,6 +1717,12 @@
 
           m.x += m.vx * wdt;
           m.y += m.vy * wdt;
+
+          if (m.teach && !m.teachShown && Math.abs(m.y - player.y) < 80) {
+            m.teachShown = true;
+            addFloater(m.x, m.y - m.r - 16, '×1.5', '#ffd166', 24);
+            addFloater(m.x, m.y - m.r - 44, '贴 脸 伤 害', 'rgba(255,209,102,0.92)', 12);
+          }
           m.rot += m.rotSpd * wdt;
           if (m.grazeCd > 0) m.grazeCd -= wdt;
 
@@ -2479,9 +2515,10 @@
       addFloater(m.x, m.y - m.r * 0.5, String(Math.round(dmg)) + nearTxt, rm > 1.01 ? '#ffd166' : '#dff6ff', 13);
     }
         if (m.hp <= 0) {
-                addFloater(m.x, m.y - m.r * 0.6, '+' + Math.round(14 * getMult()), '#ffd166', 18);
+      var killScore = Math.round(14 * getMult() * rm);
+                addFloater(m.x, m.y - m.r * 0.6, '+' + killScore, '#ffd166', 18);
       addSparks(m.x, m.y, 9, '#ffd166');
-      addScore(14 * getMult());
+      addScore(14 * getMult() * rm);
       addCombo(1);
       destroyMeteor(index, false);
     }
@@ -3127,10 +3164,20 @@
     game.shopRefresh = (game.shopRefresh || 0) + 1;
 
     var before = game.shopOffers.map(function (o) { return o.name; }).join('|');
-    for (var t = 0; t < 4; t++) {
+    var wantPity = game.shopRefresh >= 3;   // 同一商店里第 3 次起保底出可成长项
+    for (var t = 0; t < 12; t++) {
       game.shopOffers = buildOffers();
       var after = game.shopOffers.map(function (o) { return o.name; }).join('|');
-      if (after !== before) break;      // 至少换掉一张，避免"点了个寂寞"
+      if (wantPity) {
+        var hasPower = false;
+        for (var q = 0; q < game.shopOffers.length; q++) {
+          var kd = game.shopOffers[q].kind;
+          if (kd === 'upgrade' || kd === 'weapon') { hasPower = true; break; }
+        }
+        if (hasPower) break;
+      } else if (after !== before) {
+        break;      // 首次刷新：至少换掉一张，避免"点了个寂寞"
+      }
     }
     Sound.choose();
     renderShop();
@@ -3340,6 +3387,7 @@
 
         for (var i = meteors.length - 1; i >= 0; i--) {
           var m = meteors[i];
+          if (m.teach) continue;
           var hitR = m.hitR + p.r * 0.7;
           var d2 = dist2(m.x, m.y, p.x, p.y);
 
@@ -3536,6 +3584,7 @@
         updateSats(wdt);
         updateWarns(wdt);
         updateBoss(wdt);
+      updateTeach(dt);
 
         collisions();
 
@@ -4345,6 +4394,14 @@
   /* ==================== Boss 核心特写 cut-in ==================== */
   var CUT_IN_DUR = 0.5;
 
+  /* ==================== 各 Boss 的处决特写差异 ==================== */
+  var CUT_KINDS = {
+    mother: { accent: '255,70,110', hot: '255,150,175', blades: 8, title: '核 心 · 敞 开', sub: '距 离 归 零 · 判 定 已 解 除' },
+    twin: { accent: '255,62,165', hot: '255,175,220', blades: 6, title: '双 核 · 同 步', sub: '两 个 弱 点 · 同 时 暴 露' },
+    gravity: { accent: '124,107,255', hot: '190,175,255', blades: 8, title: '引 力 · 失 效', sub: '它 不 能 再 推 开 你' },
+    final: { accent: '255,43,61', hot: '255,140,150', blades: 10, title: '终 焉 · 睁 眼', sub: '最 后 一 次 贴 脸' }
+  };
+
   function drawCutIn() {
     var b = game.boss;
     if (!b || !b.exec || b.cutAt === undefined) return;
@@ -4355,6 +4412,7 @@
     var cx = W * 0.5;
     var cy = H * 0.45;
     var m = Math.min(W, H);
+    var KC = CUT_KINDS[b.kind] || CUT_KINDS.mother;
 
     ctx.save();
 
@@ -4372,7 +4430,7 @@
       ctx.globalCompositeOperation = 'lighter';
       var g = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 1.45);
       g.addColorStop(0, 'rgba(255,255,255,' + (0.9 * (0.3 + 0.7 * ease)).toFixed(3) + ')');
-      g.addColorStop(0.3, 'rgba(255,70,110,' + (0.45 * ease).toFixed(3) + ')');
+      g.addColorStop(0.3, 'rgba(' + KC.accent + ',' + (0.45 * ease).toFixed(3) + ')');
       g.addColorStop(1, 'rgba(110,0,26,0)');
       ctx.fillStyle = g;
       ctx.beginPath();
@@ -4391,9 +4449,9 @@
       ctx.globalCompositeOperation = 'lighter';
       var cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR * 3.6);
       cg.addColorStop(0, 'rgba(255,255,255,' + (0.98 * ease).toFixed(3) + ')');
-      cg.addColorStop(0.16, 'rgba(255,150,175,' + (0.75 * ease).toFixed(3) + ')');
-      cg.addColorStop(0.45, 'rgba(255,50,100,' + (0.28 * ease).toFixed(3) + ')');
-      cg.addColorStop(1, 'rgba(255,20,70,0)');
+      cg.addColorStop(0.16, 'rgba(' + KC.hot + ',' + (0.75 * ease).toFixed(3) + ')');
+      cg.addColorStop(0.45, 'rgba(' + KC.accent + ',' + (0.28 * ease).toFixed(3) + ')');
+      cg.addColorStop(1, 'rgba(' + KC.accent + ',0)');
       ctx.fillStyle = cg;
       ctx.beginPath();
       ctx.arc(cx, cy, coreR * 3.6, 0, TAU);
@@ -4404,7 +4462,8 @@
       var open = 0.18 + ease * 0.82;
       var inR = R * (0.16 + open * 0.38);
       var outR = R * 0.98;
-      var halfA = (Math.PI / 8) * 0.92;
+      var bladeN = KC.blades || 8;
+      var halfA = (Math.PI / bladeN) * 0.92;
       // 渐变只建一次：每片刀叶局部坐标系相同，绘制时随 CTM 旋转即可
       var bladeGrad = ctx.createLinearGradient(inR, 0, outR, 0);
       bladeGrad.addColorStop(0, 'rgba(96,16,32,' + (0.96 * ease).toFixed(3) + ')');
@@ -4413,27 +4472,79 @@
       ctx.save();
       ctx.translate(cx, cy);
       ctx.rotate((1 - ease) * 0.5);
-      for (var i = 0; i < 8; i++) {
+      for (var i = 0; i < bladeN; i++) {
         ctx.save();
-        ctx.rotate((i / 8) * TAU);
+        ctx.rotate((i / bladeN) * TAU);
         ctx.beginPath();
         ctx.arc(0, 0, outR, -halfA, halfA);
         ctx.arc(0, 0, inR, halfA, -halfA, true);
         ctx.closePath();
         ctx.fillStyle = bladeGrad;
         ctx.fill();
-        ctx.strokeStyle = 'rgba(255,96,126,' + (0.5 * ease).toFixed(3) + ')';
+        ctx.strokeStyle = 'rgba(' + KC.hot + ',' + (0.5 * ease).toFixed(3) + ')';
         ctx.lineWidth = 1.5;
         ctx.stroke();
         // 刀叶内沿高光
         ctx.beginPath();
         ctx.arc(0, 0, inR, -halfA, halfA);
-        ctx.strokeStyle = 'rgba(255,150,175,' + (0.65 * ease).toFixed(3) + ')';
+        ctx.strokeStyle = 'rgba(' + KC.hot + ',' + (0.65 * ease).toFixed(3) + ')';
         ctx.lineWidth = 2;
         ctx.stroke();
         ctx.restore();
       }
       ctx.restore();
+
+      // 各 Boss 专属核心形态
+      if (b.kind === 'twin') {
+        // 双核：第二个核心从左侧亮起，与主核连成一线
+        var t2x = cx - R * 0.52 * ease;
+        ctx.globalCompositeOperation = 'lighter';
+        var cg2 = ctx.createRadialGradient(t2x, cy, 0, t2x, cy, coreR * 2.8);
+        cg2.addColorStop(0, 'rgba(255,255,255,' + (0.85 * ease).toFixed(3) + ')');
+        cg2.addColorStop(0.2, 'rgba(' + KC.hot + ',' + (0.6 * ease).toFixed(3) + ')');
+        cg2.addColorStop(1, 'rgba(' + KC.accent + ',0)');
+        ctx.fillStyle = cg2;
+        ctx.beginPath();
+        ctx.arc(t2x, cy, coreR * 2.8, 0, TAU);
+        ctx.fill();
+        ctx.globalCompositeOperation = 'source-over';
+      } else if (b.kind === 'gravity') {
+        // 引力核心：三层反向旋转的引力环
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.globalCompositeOperation = 'lighter';
+        for (var gi = 0; gi < 3; gi++) {
+          ctx.save();
+          ctx.rotate(p * (4 + gi * 2) * (gi % 2 ? -1 : 1));
+          ctx.beginPath();
+          ctx.ellipse(0, 0, R * (0.62 + gi * 0.16), R * (0.2 + gi * 0.06), 0, 0, TAU);
+          ctx.strokeStyle = 'rgba(' + KC.accent + ',' + (0.55 * ease).toFixed(3) + ')';
+          ctx.lineWidth = 2.5 - gi * 0.5;
+          ctx.stroke();
+          ctx.restore();
+        }
+        ctx.restore();
+        ctx.globalCompositeOperation = 'source-over';
+      } else if (b.kind === 'final') {
+        // 终焉：从核心向外裂开的裂缝
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.strokeStyle = 'rgba(' + KC.hot + ',' + (0.8 * ease).toFixed(3) + ')';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        for (var ci = 0; ci < 12; ci++) {
+          var ca = (ci / 12) * TAU + p * 0.6;
+          var r0 = R * 0.12;
+          var r1 = R * (0.5 + (ci % 3) * 0.16);
+          var midR = (r0 + r1) * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(Math.cos(ca) * r0, Math.sin(ca) * r0);
+          ctx.lineTo(Math.cos(ca + 0.06) * midR, Math.sin(ca + 0.06) * midR);
+          ctx.lineTo(Math.cos(ca) * r1, Math.sin(ca) * r1);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
 
       // 外环扩散（伪 3D 椭圆）
       ctx.globalCompositeOperation = 'lighter';
@@ -4442,7 +4553,7 @@
         var rr = R * (0.75 + ph * 0.75);
         ctx.beginPath();
         ctx.ellipse(cx, cy, rr, rr * (0.3 + 0.12 * Math.sin(ph * 5.2)), 0, 0, TAU);
-        ctx.strokeStyle = 'rgba(255,' + (90 + k * 50) + ',' + (125 + k * 35) + ',' + ((1 - ph) * 0.5 * ease).toFixed(3) + ')';
+        ctx.strokeStyle = 'rgba(' + KC.accent + ',' + ((1 - ph) * 0.5 * ease).toFixed(3) + ')';
         ctx.lineWidth = 2 - k * 0.45;
         ctx.stroke();
       }
@@ -4481,20 +4592,20 @@
       ctx.textAlign = 'center';
       ctx.font = '900 ' + Math.round(m * 0.062) + 'px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
       ctx.fillStyle = 'rgba(215,250,255,0.95)';
-      ctx.shadowColor = 'rgba(57,246,255,0.8)';
+      ctx.shadowColor = 'rgba(' + KC.hot + ',0.85)';
       ctx.shadowBlur = 18;
-      ctx.fillText('核 心 · 敞 开', cx, cy + m * 0.34);
+      ctx.fillText(KC.title, cx, cy + m * 0.34);
       ctx.shadowBlur = 0;
       ctx.font = '600 ' + Math.round(m * 0.028) + 'px -apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
-      ctx.fillStyle = 'rgba(255,120,150,0.8)';
-      ctx.fillText('距 离 归 零 · 判 定 已 解 除', cx, cy + m * 0.34 + m * 0.055);
+      ctx.fillStyle = 'rgba(' + KC.hot + ',0.8)';
+      ctx.fillText(KC.sub, cx, cy + m * 0.34 + m * 0.055);
       ctx.restore();
     }
 
     // (5) 收尾白闪
     if (p > 0.9) {
       var wf = (p - 0.9) / 0.1;
-      ctx.fillStyle = 'rgba(255,255,255,' + (0.5 * Math.sin(wf * Math.PI * 0.7)).toFixed(3) + ')';
+      ctx.fillStyle = 'rgba(' + KC.hot + ',' + (0.5 * Math.sin(wf * Math.PI * 0.7)).toFixed(3) + ')';
       ctx.fillRect(0, 0, W, H);
     }
 
