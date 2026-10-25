@@ -9,7 +9,7 @@
 | `index.html` | ~72 | 页面骨架：canvas、HUD、底部栏、script 加载顺序 |
 | `style.css` | ~960 | 全部样式（含手机适配、`env(safe-area-inset)`） |
 | `audio.js` | ~646 | **音频模块**：程序化音乐（9 套风格）+ 全部音效，导出全局 `Sound` |
-| `game.js` | ~6505 | 其余全部：状态、更新、渲染、UI 面板、存档、调试 |
+| `game.js` | ~6531 | 其余全部：状态、更新、渲染、UI 面板、存档、调试 |
 | `worker/` | — | Cloudflare Worker 排行榜后端源码（**当前未启用**，国内 DNS 被污染） |
 | `CHANGELOG.md` | — | 每个版本的改动记录 |
 
@@ -63,6 +63,25 @@ player          // 玩家状态
 | 存档 | `SAVE_KEYS`、`exportSave()` / `importSave()`、`backupNow()`、`restoreIfLost()`、`showSavePanel()` |
 | 成就 | `ACH_LIST`、`unlock()`、`checkAch()` |
 | 章节主题 | `CHAPTERS`（6 章配色）、`themeIndex()`、`chapterTheme()` |
+
+## 坐标系统（v4.9.0 起）
+
+```
+LOGICAL_W = 390, LOGICAL_H = 844   // 逻辑画布，等价于手机参考尺寸
+vScale = min(vw / LOGICAL_W, vh / LOGICAL_H)
+vOffX  = (vw - LOGICAL_W * vScale) / 2   // 黑边左缘
+W = LOGICAL_W, H = LOGICAL_H             // 全文所有 W/H 都是逻辑尺寸
+```
+
+**一条铁律**：任何从事件里拿到的坐标都是「屏幕坐标」，进世界前必须换算。
+
+- 鼠标绝对定位：`(e.clientX - vOffX) / vScale`
+- 触摸相对拖动：屏幕位移 `dx → dx / vScale`（触摸只取差值，不用减偏移）
+- 纯比较判定（双击位移 < 18px、间隔 < 340ms）留在屏幕空间，不换算
+
+渲染侧只有一个复位点，就是 `render()` 的第一行；绘制代码一律不要自己 `setTransform`。
+
+---
 
 ## 存档键
 
