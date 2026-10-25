@@ -1390,7 +1390,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v3.4.0';
+      verEl.textContent = 'v3.4.1';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -1409,6 +1409,16 @@
         if (el) { el.style.display = 'block'; document.body.appendChild(el); }
         debugSync();
         toast('调 试 模 式 开 启');
+      }
+
+      function toggleDebugPanel() {
+        var el = document.getElementById('dbgPanel');
+        if (el && el.style.display === 'block') {
+          el.style.display = 'none';
+          game.debug = false;
+          return;
+        }
+        enableDebugPanel();
       }
 
       function openPassGate() {
@@ -1454,7 +1464,7 @@
         var need = debugUnlocked() ? 3 : 5;
         if (verTapN >= need) {
           verTapN = 0;
-          if (debugUnlocked()) enableDebugPanel();
+          if (debugUnlocked()) toggleDebugPanel();
           else openPassGate();
         }
       });
@@ -6319,7 +6329,10 @@
 
     addBtn('关 闭 面 板', null, function () { wrap.style.display = 'none'; });
 
-    addBtn('材料 +500', null, function () { game.mat += 500; });
+    addBtn('材料 +500', null, function () {
+      game.mat += 500;
+      if (game.shopOpen) renderShop();
+    });
 
     addBtn('无敌：关', 'dbgInv', function () {
       game.debugInv = !game.debugInv;
