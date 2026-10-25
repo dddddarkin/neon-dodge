@@ -1067,7 +1067,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v2.0.0';
+      verEl.textContent = 'v2.1.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -1343,11 +1343,14 @@
       }
 
       function makeSlabShape(r) {
-        var shape = [];
-        for (var i = 0; i < 6; i++) {
-          shape.push({ a: (i / 6) * TAU, rr: r * (i % 3 === 0 ? 1.55 : 1.0) });
+        // 装甲板：宽扁带切角，作为"陨石墙"的构成单元
+        var pts = [[1.3, -0.3], [0.86, -0.7], [-0.86, -0.7], [-1.3, -0.3], [-1.3, 0.3], [-0.86, 0.7], [0.86, 0.7], [1.3, 0.3]];
+        var out = [];
+        for (var i = 0; i < pts.length; i++) {
+          var x = pts[i][0] * r, y = pts[i][1] * r;
+          out.push({ a: Math.atan2(y, x), rr: Math.sqrt(x * x + y * y) });
         }
-        return shape;
+        return out;
       }
 
       function makeDropShape(r) {
@@ -3718,17 +3721,50 @@
       ctx.lineJoin = 'round';
       ctx.stroke();
 
-      ctx.beginPath();
-      for (var k = 0; k < s.length; k += 2) {
-        var px = Math.cos(s[k].a) * s[k].rr * 0.48;
-        var py = Math.sin(s[k].a) * s[k].rr * 0.48;
-        if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.closePath();
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+
+      if (m.kind === 'slab') {
+        // 装甲板：横向刻线 + 中缝（机械感，区别于圆滚的碎片）
+        ctx.strokeStyle = 'rgba(255,255,255,0.20)';
+        ctx.lineWidth = 1;
+        for (var hI = -1; hI <= 1; hI++) {
+          var hY = hI * m.r * 0.26;
+          var hW = m.r * 1.16 * Math.sqrt(Math.max(0, 1 - (hI / 2.4) * (hI / 2.4)));
+          ctx.beginPath();
+          ctx.moveTo(-hW, hY);
+          ctx.lineTo(hW, hY);
+          ctx.stroke();
+        }
+        ctx.strokeStyle = 'rgba(255,255,255,0.30)';
+        ctx.beginPath();
+        ctx.moveTo(0, -m.r * 0.58);
+        ctx.lineTo(0, m.r * 0.58);
+        ctx.stroke();
+      } else if (m.kind === 'strike') {
+        // 坠石：向上的尾迹，暗示它是砸下来的
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.strokeStyle = 'rgba(255,154,60,0.55)';
+        ctx.lineWidth = 2;
+        for (var tI = 0; tI < 3; tI++) {
+          var tX = (tI - 1) * m.r * 0.38;
+          ctx.beginPath();
+          ctx.moveTo(tX, -m.r * 0.55);
+          ctx.lineTo(tX * 1.6, -m.r * (1.5 + tI * 0.4));
+          ctx.stroke();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      } else {
+        ctx.beginPath();
+        for (var k = 0; k < s.length; k += 2) {
+          var px = Math.cos(s[k].a) * s[k].rr * 0.48;
+          var py = Math.sin(s[k].a) * s[k].rr * 0.48;
+          if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
 
       if (m.kind === 'homing') {
         ctx.shadowColor = '#ff3ea5';
