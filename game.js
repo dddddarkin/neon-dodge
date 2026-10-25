@@ -60,15 +60,22 @@
   }
 
   /* ==================== 危险值系统：越赌越强 ==================== */
-  var DANGER_MAX = 100;
-  var DANGER_DECAY = 6;         // 停滞 2 秒后每秒流失
+  var DANGER_MAX = 120;
+  var DANGER_DECAY = 4;         // 停滞 2 秒后每秒流失
   var DANGER_HIT_LOSS = 35;     // 受一击损失（不清零）
   var BURST_DUR = 3;            // 爆发时长（秒）
   var BURST_MUL = 2;            // 爆发伤害倍率（与距离倍率叠乘）
 
+  function dangerGainMul() {
+    if (game.wave <= 4) return 1.4;
+    if (game.wave <= 9) return 1.1;
+    return 0.9;
+  }
+
   function addDanger(v) {
     if (game.mode !== 'play' || game.burstT > 0) return;
-    game.danger = clamp((game.danger || 0) + v, 0, DANGER_MAX);
+    var gain = v * dangerGainMul() * (player.mods.dangerGain || 1);
+    game.danger = clamp((game.danger || 0) + gain, 0, DANGER_MAX);
     game.dangerIdle = 0;
     if (game.danger >= DANGER_MAX) releaseDanger();
   }
@@ -142,7 +149,7 @@
 
     // 停滞衰减
     game.dangerIdle = (game.dangerIdle || 0) + dt;
-    if (game.dangerIdle > 2 && game.danger > 0) {
+    if (game.dangerIdle > 3 && game.danger > 0) {
       game.danger = Math.max(0, game.danger - DANGER_DECAY * dt);
     }
   }
@@ -277,7 +284,8 @@
         return {
           speedMul: 1, dashCdMul: 1, magnetR: 0, magnetAlways: false,
           scoreMul: 1, grazeBand: 0, grazeMul: 1, dashInvuln: 1,
-          shieldMax: 2, pickupMul: 1
+          shieldMax: 2, pickupMul: 1,
+      dangerGain: 1, burstMul: 2, burstShield: 0, echoChance: 0, dmgMul: 1
         };
       }
 
@@ -1369,7 +1377,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v3.1.0';
+      verEl.textContent = 'v3.2.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -1464,7 +1472,7 @@
       }
 
       function getMult() {
-        return clamp(1 + Math.floor(game.combo / 5), 1, 8);
+        return clamp(1 + Math.floor(game.combo / 8), 1, 6);
       }
 
       function addCombo(n) {
@@ -1826,7 +1834,53 @@
       }
 
       /* ==================== 玩家更新 ==================== */
-            function releaseShockwave(x, y, radius, dmg) {
+            /* ==================== Boss 脉冲波 / 弹幕 ==================== */
+  var pulses = [];
+
+  function spawnPulse(x, y) {
+    pulses.push({ x: x, y: y, r: 40, max: Math.max(W, H) * 1.15, spd: 560, hit: false });
+    Sound.bossOpen();
+    game.shake = Math.max(game.shake || 0, 8);
+  }
+
+  function updatePulses(dt) {
+    for (var i = pulses.length - 1; i >= 0; i--) {
+      var p = pulses[i];
+      p.r += p.spd * dt;
+      if (!p.hit && game.mode === 'play') {
+        var d = hyp(player.x - p.x, player.y - p.y);
+        if (Math.abs(d - p.r) < 16) { p.hit = true; damage(); }
+      }
+      if (p.r > p.max) pulses.splice(i, 1);
+    }
+  }
+
+  function drawPulses() {
+    for (var i = 0; i < pulses.length; i++) {
+      var p = pulses[i];
+      var a = Math.max(0, 1 - p.r / p.max);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, TAU);
+      ctx.strokeStyle = 'rgba(255,60,90,' + (0.75 * a).toFixed(3) + ')';
+      ctx.lineWidth = 14 * a + 3;
+      ctx.shadowColor = 'rgba(255,40,80,0.9)';
+      ctx.shadowBlur = 24;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  function bossFan(x, y, n, spread, spd) {
+    for (var i = 0; i < n; i++) {
+      var ang = Math.PI / 2 + (i - (n - 1) / 2) * spread;
+      meteors.push(makeMeteor(x, y, sRand(11, 15), Math.cos(ang) * spd, Math.sin(ang) * spd, 'rock'));
+    }
+    game.shake = Math.max(game.shake || 0, 5);
+  }
+
+  function releaseShockwave(x, y, radius, dmg) {
     shockwaves.push({ x: x, y: y, r: 12, max: radius, life: 0.34, maxLife: 0.34 });
 
     for (var i = meteors.length - 1; i >= 0; i--) {
@@ -2390,20 +2444,60 @@
 
     }
 
+    if (b.pullT > 0) {
+      b.pullT -= wdt;
+      var pdx = b.x - player.x, pdy = b.y - player.y;
+      var pd = hyp(pdx, pdy) || 1;
+      player.x = clamp(player.x + (pdx / pd) * 170 * wdt, 12, W - 12);
+      player.y = clamp(player.y + (pdy / pd) * 170 * wdt, 12, H - 12);
+    }
+
     b.spawnT -= wdt * (b.enraged ? 1.6 : 1);
     if (b.spawnT <= 0) {
+      b.atkIdx = (b.atkIdx || 0) + 1;
+      var alt = b.atkIdx % 2 === 0;
+
       if (b.kind === 'mother') {
-        b.spawnT = 2.3;
-        spawnMeteorAt(b.x + sRand(-46, 46), b.y + b.r * 0.5, sRand(12, 19), sRand(170, 250), 'rock');
+        if (!alt) {
+          b.spawnT = 2.3;
+          spawnMeteorAt(b.x + sRand(-46, 46), b.y + b.r * 0.5, sRand(12, 19), sRand(170, 250), 'rock');
+        } else {
+          // 二式：朝下的扇形三连弹
+          b.spawnT = 2.6;
+          bossFan(b.x, b.y + b.r * 0.5, 3, 0.42, 330);
+        }
       } else if (b.kind === 'twin') {
-        b.spawnT = 3.0;
-        spawnMeteorAt(b.x + sRand(-30, 30), b.y + b.r * 0.5, sRand(11, 17), sRand(190, 260), 'rock');
+        if (!alt) {
+          b.spawnT = 3.0;
+          spawnMeteorAt(b.x + sRand(-30, 30), b.y + b.r * 0.5, sRand(11, 17), sRand(190, 260), 'rock');
+        } else {
+          // 二式：双核各自斜甩一串陨石
+          b.spawnT = 2.8;
+          var side = b.coreSide || 1;
+          for (var ti = 0; ti < 2; ti++) {
+            spawnMeteorAt(b.x + side * b.r * (0.5 + ti * 0.4), b.y + b.r * 0.4, sRand(11, 16), sRand(200, 260), 'rock');
+            var lm = meteors[meteors.length - 1];
+            if (lm) lm.vx = side * (90 + ti * 70);
+          }
+          b.coreSide = -side;
+        }
       } else if (b.kind === 'gravity') {
-        b.spawnT = 3.4;
-        spawnStrike();
-        spawnStrike();
+        if (!alt) {
+          b.spawnT = 3.4;
+          spawnStrike();
+          spawnStrike();
+        } else {
+          // 二式：引力拉扯，把玩家往核心拖
+          b.spawnT = 3.8;
+          b.pullT = 0.9;
+          banner('引 力 拉 扯', '#b9a6ff');
+        }
       } else if (b.kind === 'final') {
-        if (b.phase === 1) {
+        if (b.atkIdx % 3 === 0) {
+          // 每三招插一次全屏脉冲波
+          b.spawnT = 2.6;
+          spawnPulse(b.x, b.y);
+        } else if (b.phase === 1) {
           b.spawnT = 2.0;
           spawnMeteorAt(b.x + sRand(-60, 60), b.y + b.r * 0.5, sRand(12, 18), sRand(200, 280), 'rock');
         } else if (b.phase === 2) {
@@ -2807,7 +2901,8 @@
     var m = meteors[index];
     if (!m) return;
 
-    if (game.burstT > 0) dmg = dmg * BURST_MUL;
+    if (game.burstT > 0) dmg = dmg * (player.mods.burstMul || BURST_MUL);
+    dmg = dmg * (player.mods.dmgMul || 1);
     dmg = dmg * (game.debugDmgMul || 1);
     var rm = rangeMul(m.x, m.y, m.r);
     dmg = dmg * rm;
@@ -2835,7 +2930,12 @@
       addFloater(m.x, m.y - m.r * 0.5, String(Math.round(dmg)) + nearTxt, rm > 1.01 ? '#ffd166' : '#dff6ff', 13);
     }
         if (m.hp <= 0) {
-      if (rm >= 1.49) addDanger(6);
+      addDanger(rm >= 1.49 ? 7 : 2);
+      if (player.mods.echoChance && Math.random() < player.mods.echoChance && !game.inEcho) {
+        game.inEcho = true;
+        releaseShockwave(m.x, m.y, 110, 4);
+        game.inEcho = false;
+      }
       var killScore = Math.round(14 * getMult() * rm);
                 addFloater(m.x, m.y - m.r * 0.6, '+' + killScore, '#ffd166', 18);
       addSparks(m.x, m.y, 9, '#ffd166');
@@ -3428,6 +3528,12 @@
     }
 
        pool.push({ kind: 'shield', name: '应急护盾', desc: '立即获得 1 层护盾', color: '#8ef4ff', price: 12 + wave });
+    pool.push({ kind: 'capacitor', name: '过载电容', desc: '危险值充能 +30%', color: '#ff9ecb', price: 18 + wave * 2 });
+    pool.push({ kind: 'detonate', name: '引爆协议', desc: '爆发伤害 ×2 → ×2.5', color: '#ff5c8a', price: 24 + wave * 2 });
+    pool.push({ kind: 'stabilizer', name: '临界稳定器', desc: '爆发期间免疫一次伤害', color: '#8ef4ff', price: 20 + wave * 2 });
+    pool.push({ kind: 'echo', name: '残响核心', desc: '击杀 20% 概率引发小冲击波', color: '#ffcf8a', price: 22 + wave * 2 });
+    pool.push({ kind: 'magazine', name: '超载弹匣', desc: '武器伤害 +12%', color: '#5cff9d', price: 16 + wave * 2 });
+    pool.push({ kind: 'inertia', name: '惯性引擎', desc: '冲刺冷却 -25%', color: '#b9a6ff', price: 18 + wave * 2 });
     pool.push({ kind: 'speed', name: '矢量推进', desc: '移动速度 +8%', color: '#5cff9d', price: 14 + wave });
     pool.push({ kind: 'magnet', name: '引力场', desc: '材料吸附范围 +100', color: '#ffcf8a', price: 12 + wave });
     pool.push({ kind: 'graze', name: '刀锋边缘', desc: '擦身得分 ×1.5', color: '#ff9ecb', price: 15 + wave });
@@ -3646,6 +3752,18 @@
       player.mods.magnetR += 100;
     } else if (o.kind === 'graze') {
       player.mods.grazeMul *= 1.5;
+    } else if (o.kind === 'capacitor') {
+      player.mods.dangerGain = (player.mods.dangerGain || 1) * 1.3;
+    } else if (o.kind === 'detonate') {
+      player.mods.burstMul = 2.5;
+    } else if (o.kind === 'stabilizer') {
+      player.mods.burstShield = (player.mods.burstShield || 0) + 1;
+    } else if (o.kind === 'echo') {
+      player.mods.echoChance = (player.mods.echoChance || 0) + 0.2;
+    } else if (o.kind === 'magazine') {
+      player.mods.dmgMul = (player.mods.dmgMul || 1) * 1.12;
+    } else if (o.kind === 'inertia') {
+      player.mods.dashCdMul *= 0.75;
     }
 
     game.shopOffers.splice(i, 1);
@@ -3667,6 +3785,14 @@
         function damage() {
     var p = player;
     if (p.invuln > 0 || game.debugInv) return false;
+    if (game.burstT > 0 && (p.mods.burstShield || 0) > 0) {
+      p.mods.burstShield -= 1;
+      p.invuln = Math.max(p.invuln, 0.8);
+      burst(p.x, p.y, '#ff2b3d', 18, 260);
+      Sound.shieldBreak();
+      glitch(0.7, 0.25);
+      return true;
+    }
     if (game.burstT <= 0) game.danger = Math.max(0, (game.danger || 0) - DANGER_HIT_LOSS);
     breakCombo();
     game.waveDamaged = true;
@@ -3865,6 +3991,7 @@
        updateFloaters(dt);
        updateSparks(dt);
         updateShockwaves(dt);
+        updatePulses(dt);
 
         game.shake *= Math.exp(-6 * dt);
         if (game.shake < 0.05) game.shake = 0;
@@ -5342,6 +5469,7 @@
     }
 
         drawShockwaves();
+        drawPulses();
        drawHitboxes();
            drawSparks();
     drawFloaters();
@@ -5827,6 +5955,7 @@
     pendingEntry = false;
 
     meteors.length = 0;
+    pulses.length = 0;
     orbs.length = 0;
     pickups.length = 0;
     particles.length = 0;
