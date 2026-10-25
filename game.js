@@ -467,6 +467,7 @@
         unlocked[id] = Date.now();
         try { localStorage.setItem('neonDodgeAch', JSON.stringify(unlocked)); } catch (e) { }
         toast('成就解锁 · ' + item.name);
+        backupNow();
         Sound.milestone();
       }
 
@@ -989,6 +990,102 @@
       var LB_DAILY = 'neonDodgeTop5:';
       var NAME_KEY = 'neonDodgeName';
 
+  /* ==================== 存档：导出码 + 自动备份 ==================== */
+  var SAVE_KEYS = ['neonDodgeBest', 'neonDodgeAch', 'neonDodgeTop5', 'neonDodgeShards', 'neonDodgeUnlocks', 'neonDodgeName', 'neonDodgeTaught'];
+  var BACKUP_KEY = 'neonDodgeBackup';
+
+  function exportSave() {
+    var o = { v: 1, t: Date.now(), d: {} };
+    for (var i = 0; i < SAVE_KEYS.length; i++) {
+      var k = SAVE_KEYS[i];
+      try {
+        var v = localStorage.getItem(k);
+        if (v !== null) o.d[k] = v;
+      } catch (e) { }
+    }
+    try {
+      return btoa(unescape(encodeURIComponent(JSON.stringify(o))));
+    } catch (e) { return ''; }
+  }
+
+  function importSave(code) {
+    var o;
+    try {
+      o = JSON.parse(decodeURIComponent(escape(atob(String(code).trim()))));
+    } catch (e) { return '格式错误'; }
+    if (!o || !o.d || typeof o.d !== 'object') return '内容非法';
+    var n = 0;
+    for (var k in o.d) {
+      if (SAVE_KEYS.indexOf(k) < 0) continue;
+      try { localStorage.setItem(k, o.d[k]); n++; } catch (e) { }
+    }
+    if (!n) return '没有可恢复的数据';
+    try { game.best = Math.max(game.best || 0, parseInt(o.d['neonDodgeBest'], 10) || 0); } catch (e) { }
+    try { unlocked = JSON.parse(localStorage.getItem('neonDodgeAch') || '{}'); } catch (e) { }
+    try { $best.textContent = String(game.best); } catch (e) { }
+    return 'ok';
+  }
+
+  function backupNow() {
+    try {
+      var c = exportSave();
+      if (c) localStorage.setItem(BACKUP_KEY, c);
+    } catch (e) { }
+  }
+
+  function restoreIfLost() {
+    try {
+      var best = localStorage.getItem('neonDodgeBest');
+      var ach = localStorage.getItem('neonDodgeAch');
+      var sh = localStorage.getItem('neonDodgeShards');
+      var bak = localStorage.getItem(BACKUP_KEY);
+      if (!bak) return false;
+      if (best !== null || ach !== null || sh !== null) return false;
+      return importSave(bak) === 'ok';
+    } catch (e) { return false; }
+  }
+
+  function showSavePanel() {
+    var code = exportSave();
+    overlay.innerHTML =
+      '<p class="over-label">存 档</p>' +
+      '<div class="lb" style="padding:14px 16px">' +
+      '<div style="font-size:12px;line-height:1.9;color:rgba(190,225,245,.85);text-align:left">' +
+      '这段码包含 <b>最高分 / 成就 / 核心碎片 / 永久解锁</b>。<br>复制到备忘录或发给自己，换手机时粘贴回来即可恢复。' +
+      '</div>' +
+      '<textarea id="saveOut" readonly style="width:100%;box-sizing:border-box;height:72px;margin-top:10px;padding:8px;border-radius:8px;background:rgba(2,8,16,.9);border:1px solid rgba(57,246,255,.3);color:#9fe8ff;font-size:10px;resize:none;font-family:monospace;word-break:break-all">' + code + '</textarea>' +
+      '<button class="btn ghost small" id="saveCopy" style="margin-top:10px">复 制 存 档 码</button>' +
+      '</div>' +
+      '<div class="lb" style="padding:14px 16px;margin-top:10px">' +
+      '<div style="font-size:12px;color:rgba(190,225,245,.85);text-align:left">恢复：把存档码粘贴到下面</div>' +
+      '<input id="saveIn" placeholder="粘贴存档码…" style="width:100%;box-sizing:border-box;margin-top:8px;padding:9px;border-radius:8px;background:rgba(2,8,16,.9);border:1px solid rgba(57,246,255,.3);color:#d8f6ff;font-size:11px;outline:none">' +
+      '<button class="btn" id="saveDo" style="margin-top:10px">读 取 存 档</button>' +
+      '</div>' +
+      '<button class="btn ghost small" id="saveBack" style="margin-top:12px">‹ 返 回 首 页</button>';
+    overlay.classList.add('show');
+    setToastZone(true);
+    document.getElementById('saveCopy').addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var ta = document.getElementById('saveOut');
+      ta.focus(); ta.select();
+      var okc = false;
+      try { okc = document.execCommand('copy'); } catch (e) { okc = false; }
+      if (!okc && navigator.clipboard) {
+        navigator.clipboard.writeText(ta.value).then(function () { toast('存档码已复制'); }, function () { toast('请长按手动复制'); });
+        return;
+      }
+      toast(okc ? '存档码已复制' : '请长按手动复制');
+    });
+    document.getElementById('saveDo').addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      var v = document.getElementById('saveIn').value;
+      if (!v) { toast('请先粘贴存档码'); return; }
+      var r = importSave(v);
+      if (r === 'ok') { toast('存档已恢复'); showMenu(); } else { toast('存档码无效：' + r); }
+    });
+    document.getElementById('saveBack').addEventListener('click', function (ev) { ev.stopPropagation(); showMenu(); });
+  }
+
       function lbKey(daily) { return daily ? LB_DAILY + todayKey() : LB_KEY; }
 
       function loadBoard(daily) {
@@ -1087,6 +1184,7 @@
     var list = getUnlocks();
     list.push(id);
     saveUnlocks(list);
+    backupNow();
     Sound.choose();
     return true;
   }
@@ -1422,7 +1520,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.3.0';
+      verEl.textContent = 'v4.4.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -6317,6 +6415,7 @@
       '<div class="lb"><div class="lb-title">本 机 前 五</div>' + boardHTML(board) + '</div>' +
             '<button class="ach-line ach-entry" id="coreBtn">核 心 仓 库 <b>' + getShards() + '</b><span class="ach-arrow">›</span></button>' +
             '<button class="ach-line ach-entry" id="achBtn">成 就 <b>' + achCount() + ' / ' + ACH_LIST.length + '</b><span class="ach-arrow">›</span></button>' +
+      '<button class="ach-line ach-entry" id="saveBtn">存 档 <span class="ach-arrow">›</span></button>' +
       '<p class="tip">空格 开始　·　M 静音　·　P 暂停 / 查看属性</p>';
 
 
@@ -6326,6 +6425,7 @@
         document.getElementById('dailyBtn').addEventListener('click', function () { startGame(true); });
     document.getElementById('achBtn').addEventListener('click', showAchievements);
     document.getElementById('coreBtn').addEventListener('click', showCoreShop);
+    document.getElementById('saveBtn').addEventListener('click', showSavePanel);
   }
 
     function showAchievements() {
@@ -6666,6 +6766,7 @@
     }
 
     game.lastShards = grantShards();
+    backupNow();
 
     pendingEntry = qualifiesEntry(s);
 
@@ -7024,6 +7125,7 @@
   $best.textContent = String(game.best);
   refreshBestName();
   updateHUD();
+  restoreIfLost();
   showMenu();
   requestAnimationFrame(frame);
 })();
