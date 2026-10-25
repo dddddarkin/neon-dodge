@@ -1014,11 +1014,34 @@
         }
       });
 
-      window.addEventListener('pointerup', function (e) {
+           window.addEventListener('pointerup', function (e) {
         if (e.pointerId === pointer.id) pointer.id = null;
         pointer.down = false;
         if (pointer.mode === 'relative') pointer.active = false;
       });
+
+      /* ---- 手机双击冲刺 ---- */
+      var tapT = 0, tapX = 0, tapY = 0, tapDownT = 0;
+      canvas.addEventListener('pointerdown', function (e) {
+        if (e.pointerType === 'mouse' || e.isPrimary === false) return;
+        tapDownT = performance.now();
+        tapX = e.clientX;
+        tapY = e.clientY;
+      });
+      canvas.addEventListener('pointerup', function (e) {
+        if (e.pointerType === 'mouse' || e.isPrimary === false) return;
+        var now = performance.now();
+        if (now - tapDownT > 260) { tapT = 0; return; }
+        if (hyp(e.clientX - tapX, e.clientY - tapY) > 18) { tapT = 0; return; }
+        if (now - tapT < 340) {
+          tapT = 0;
+          tryDash();
+          if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) { } }
+        } else {
+          tapT = now;
+        }
+      });
+      canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       window.addEventListener('pointercancel', function (e) {
         if (e.pointerId === pointer.id) pointer.id = null;
@@ -3101,9 +3124,16 @@
         p.dashTime = 0.18;
         p.invuln = Math.max(p.invuln, 0.45 * p.mods.dashInvuln);
 
-        var dx = p.vx, dy = p.vy;
+               var dx = p.vx, dy = p.vy;
         var d = hyp(dx, dy);
-        if (d < 30) { dx = 0; dy = -1; d = 1; }
+        if (d >= 30) {
+          p.lastDirX = dx / d;
+          p.lastDirY = dy / d;
+        } else if (p.lastDirX || p.lastDirY) {
+          dx = p.lastDirX; dy = p.lastDirY; d = 1;
+        } else {
+          dx = 0; dy = -1; d = 1;
+        }
         p.vx = (dx / d) * 1350 * p.mods.speedMul;
         p.vy = (dy / d) * 1350 * p.mods.speedMul;
 
