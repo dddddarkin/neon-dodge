@@ -3,3 +3,4 @@ _patch_*.js
 _grep.js
 *.log
 
+_api_*.js

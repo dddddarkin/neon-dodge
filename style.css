@@ -959,3 +959,33 @@
       }
     }
   
+    /* ---- 首页三行分层 ---- */
+    .hook-main {
+      margin-top: 20px;
+      font-size: clamp(19px, 5.6vw, 32px);
+      font-weight: 900;
+      letter-spacing: .04em;
+      color: #f4feff;
+      text-shadow: 0 0 10px rgba(57, 246, 255, .85), 0 0 34px rgba(255, 62, 165, .55);
+    }
+
+    .hook-sub {
+      margin-top: 8px;
+      font-size: clamp(13px, 3.6vw, 18px);
+      font-weight: 600;
+      letter-spacing: .06em;
+      color: #ffd166;
+      text-shadow: 0 0 14px rgba(255, 209, 102, .55);
+    }
+
+    .hook-sub b {
+      color: #fff3cf;
+      font-weight: 800;
+    }
+
+    .opline {
+      margin-top: 18px;
+      font-size: clamp(11px, 3.1vw, 13px);
+      letter-spacing: .12em;
+      color: rgba(190, 225, 245, .55);
+    }

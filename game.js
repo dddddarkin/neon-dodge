@@ -1067,7 +1067,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v2.1.0';
+      verEl.textContent = 'v2.2.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -4994,14 +4994,9 @@
 
         overlay.innerHTML =
       '<h1 class="title">NEON DODGE</h1>' +
-      '<p class="sub">霓 虹 陨 石</p>' +
-      '<p class="sub2" style="margin-top:12px;color:rgba(160,210,235,.72);letter-spacing:.3em">越 靠 近 危 险　越 强</p>' +
-      '<p class="hint">' +
-        '<b>鼠标移动 / 手指拖拽</b> 操控　·　<b>WASD / 方向键</b> 同样可用<br>' +
-        '<b>空格 / Shift</b> 冲刺，可撞碎陨石　·　手机<b>双击屏幕</b>冲刺<br>' +
-        '每波 22 秒，达成<span class="o">击杀目标</span>拿 S 评级，波间进 <span class="c">商店</span> 变强<br>' +
-        '共 <b>16 波 · 4 章 · 4 个 Boss</b>，通关后进入 <span class="v">无尽模式</span>' +
-      '</p>' +
+      '<p class="hook-main">别躲。贴上去。</p>' +
+      '<p class="hook-sub">越靠近危险，<b>伤害越高</b></p>' +
+      '<p class="opline">' + ((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? '拖拽移动 · 双击冲刺 · 撞碎陨石' : '鼠标 / WASD 移动 · 空格冲刺 · 撞碎陨石') + '</p>' +
       '<button class="btn" id="startBtn">开 始 游 戏</button>' +
       '<button class="btn ghost" id="dailyBtn">每 日 挑 战' + (dbest > 0 ? ' · ' + dbest : '') + '</button>' +
       '<div class="lb"><div class="lb-title">本 机 前 五</div>' + boardHTML(board) + '</div>' +
