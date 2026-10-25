@@ -872,6 +872,12 @@
         } else if (type === 'arc') {
           noise(0.09, 0.07, 5200, 2400, 'highpass');
           tone(1800, 900, 0.06, 'square', 0.03);
+        } else if (type === 'shock') {
+          noise(0.15, 0.13, 900, 120, 'lowpass');
+          tone(130, 48, 0.2, 'square', 0.07);
+        } else if (type === 'boomerang') {
+          tone(760, 1240, 0.1, 'sine', 0.05);
+          noise(0.08, 0.04, 2600, 1200, 'bandpass');
         } else {
           tone(1050, 720, 0.055, 'square', 0.03);
         }
@@ -1390,7 +1396,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v3.4.1';
+      verEl.textContent = 'v4.0.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -1966,6 +1972,71 @@
       meteors.push(makeMeteor(x, y, sRand(11, 15), Math.cos(ang) * spd, Math.sin(ang) * spd, 'rock'));
     }
     game.shake = Math.max(game.shake || 0, 5);
+  }
+
+  /* ==================== 震波炮：锥形瞬间伤害 ==================== */
+  var shockFlashes = [];
+
+  function fireShock(p, t, st) {
+    var ang = Math.atan2(t.y - p.y, t.x - p.x);
+    var cone = st.cone || 0.55;
+
+    for (var i = meteors.length - 1; i >= 0; i--) {
+      var m = meteors[i];
+      if (!m || m.teach) continue;
+      var d = hyp(m.x - p.x, m.y - p.y);
+      if (d > st.range + m.r) continue;
+      var a = Math.atan2(m.y - p.y, m.x - p.x);
+      var diff = Math.abs(Math.atan2(Math.sin(a - ang), Math.cos(a - ang)));
+      if (diff > cone) continue;
+      damageMeteor(i, st.dmg);
+    }
+
+    var bb = game.boss;
+    if (bb && bb.hp > 0) {
+      var bd = hyp(bb.x - p.x, bb.y - p.y);
+      if (bd < st.range + bb.r) {
+        var ba = Math.atan2(bb.y - p.y, bb.x - p.x);
+        if (Math.abs(Math.atan2(Math.sin(ba - ang), Math.cos(ba - ang))) <= cone) {
+          bb.hp -= st.dmg * 0.006;
+        }
+      }
+    }
+
+    shockFlashes.push({ x: p.x, y: p.y, a: ang, t: 0, max: 0.26, range: st.range, cone: cone, color: st.color });
+    game.shake = Math.max(game.shake || 0, 4);
+  }
+
+  function updateShockFlashes(dt) {
+    for (var i = shockFlashes.length - 1; i >= 0; i--) {
+      shockFlashes[i].t += dt;
+      if (shockFlashes[i].t >= shockFlashes[i].max) shockFlashes.splice(i, 1);
+    }
+  }
+
+  function drawShockFlashes() {
+    for (var i = 0; i < shockFlashes.length; i++) {
+      var f = shockFlashes[i];
+      var k = f.t / f.max;
+      var a = (1 - k) * 0.85;
+      var rr = f.range * (0.55 + k * 0.55);
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.a);
+      ctx.beginPath();
+      ctx.arc(0, 0, rr, -f.cone, f.cone);
+      ctx.strokeStyle = 'rgba(255,179,71,' + a.toFixed(3) + ')';
+      ctx.lineWidth = 6 * (1 - k) + 1.5;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, rr * 0.92, -f.cone * 0.75, f.cone * 0.75);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(255,140,60,' + (a * 0.22).toFixed(3) + ')';
+      ctx.fill();
+      ctx.restore();
+    }
   }
 
   function releaseShockwave(x, y, radius, dmg) {
@@ -2793,10 +2864,18 @@
     laser: {
       name: '激光', color: '#ff5c8a', range: 520, interval: 1.15,
       dmg: 9, speed: 2200, pierce: 3, desc: '高速穿透，射速很慢'
+    },
+    boomerang: {
+      name: '回旋刃', color: '#7fffd4', range: 330, interval: 0.9,
+      dmg: 4, speed: 760, pierce: 99, bulletR: 7, desc: '投出后折返，往返各命中一次'
+    },
+    shock: {
+      name: '震波炮', color: '#ffb347', range: 195, interval: 0.95,
+      dmg: 7, speed: 0, cone: 0.55, desc: '锥形震波，无需弹道'
     }
   };
 
-  var WEAPON_KEYS = ['pulse', 'shotgun', 'arc', 'laser'];
+  var WEAPON_KEYS = ['pulse', 'shotgun', 'arc', 'laser', 'boomerang', 'shock'];
   var MAX_SLOTS = 4;
   var arcFx = [];
 
@@ -2841,6 +2920,27 @@
         { id: 'heavy', name: '重炮模组', desc: '伤害 +60%，射速 -15%', color: '#ff2b3d' },
         { id: 'quick', name: '速射模组', desc: '射速 +40%，伤害 -20%', color: '#ffb347' }
       ]
+
+    },
+    boomerang: {
+      3: [
+        { id: 'bspin', name: '加速模组', desc: '投掷速度 +45%', color: '#7fffd4' },
+        { id: 'bwide', name: '宽刃模组', desc: '命中判定 +60%', color: '#5cff9d' }
+      ],
+      5: [
+        { id: 'btwin', name: '双刃模组', desc: '双刃齐投，单发 -25%', color: '#39f6ff' },
+        { id: 'bheavy', name: '重刃模组', desc: '伤害 +75%', color: '#8ef4ff' }
+      ]
+    },
+    shock: {
+      3: [
+        { id: 'sres', name: '增压模组', desc: '伤害 +35%', color: '#ffb347' },
+        { id: 'swide', name: '广域模组', desc: '锥角 ×1.5', color: '#ffd166' }
+      ],
+      5: [
+        { id: 'sfast', name: '连震模组', desc: '间隔 -35%', color: '#ff9ecb' },
+        { id: 'sover', name: '超压模组', desc: '伤害 +60%，间隔 +10%', color: '#ff5c8a' }
+      ]
     }
   };
 
@@ -2864,6 +2964,14 @@
       else if (id === 'triple') { st.pellets += 2; st.dmg *= 0.55; }
       else if (id === 'heavy') { st.dmg *= 1.6; st.interval *= 1.15; }
       else if (id === 'quick') { st.interval *= 0.6; st.dmg *= 0.8; }
+      else if (id === 'bspin') { st.speed *= 1.45; }
+      else if (id === 'bwide') { st.bulletR = (st.bulletR || 7) * 1.6; }
+      else if (id === 'btwin') { st.pellets = 2; st.dmg *= 0.75; }
+      else if (id === 'bheavy') { st.dmg *= 1.75; }
+      else if (id === 'sres') { st.dmg *= 1.35; }
+      else if (id === 'swide') { st.cone = (st.cone || 0.55) * 1.5; }
+      else if (id === 'sfast') { st.interval *= 0.65; }
+      else if (id === 'sover') { st.dmg *= 1.6; st.interval *= 1.1; }
     }
   }
 
@@ -2880,7 +2988,9 @@
       pellets: d.pellets || 1,
       spread: d.spread || 0,
       chain: d.chain || 0,
-      pierce: d.pierce || 0
+      pierce: d.pierce || 0,
+      cone: d.cone || 0,
+      bulletR: d.bulletR || 0
     };
     applyWeaponMods(w, st);
     return st;
@@ -2930,6 +3040,12 @@
     b.color = opts.color || '#39f6ff';
     b.pierce = opts.pierce || 0;
     b.hits.length = 0;
+    b.boomerang = !!opts.boomerang;
+    b.maxDist = opts.maxDist || 0;
+    b.travel = 0;
+    b.back = false;
+    b.spin = 0;
+    if (b.boomerang) b.life = 2.4;
     bullets.push(b);
   }
 
@@ -2987,6 +3103,24 @@
       w.cd = st.interval;
       var ang = Math.atan2(t.y - p.y, t.x - p.x);
 
+      if (w.type === 'shock') {
+        fireShock(p, t, st);
+        Sound.shoot('shock');
+        continue;
+      }
+      if (w.type === 'boomerang') {
+        var bn = st.pellets || 1;
+        var br = st.bulletR || 7;
+        for (var bk = 0; bk < bn; bk++) {
+          var bcoff = bn > 1 ? (bk - (bn - 1) / 2) * 0.16 : 0;
+          spawnBullet(p.x, p.y - 6, ang + bcoff, st.speed, st.dmg, {
+            r: br, color: st.color, pierce: st.pierce, boomerang: true, maxDist: st.range
+          });
+        }
+        Sound.shoot('boomerang');
+        continue;
+      }
+
       if (w.type === 'shotgun') {
         for (var k = 0; k < st.pellets; k++) {
           var off = st.pellets > 1 ? (k - (st.pellets - 1) / 2) * (st.spread / st.pellets) : 0;
@@ -3013,6 +3147,27 @@
       b.x += b.vx * dt;
       b.y += b.vy * dt;
       b.life -= dt;
+
+      if (b.boomerang) {
+        b.spin = (b.spin || 0) + dt * 16;
+        var bsp = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        if (!b.back) {
+          b.travel += bsp * dt;
+          if (b.travel >= b.maxDist) { b.back = true; b.hits.length = 0; }
+        } else {
+          var bdx = player.x - b.x, bdy = player.y - b.y;
+          var bd = Math.sqrt(bdx * bdx + bdy * bdy) || 1;
+          b.vx += (bdx / bd) * 2400 * dt;
+          b.vy += (bdy / bd) * 2400 * dt;
+          var nsp = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+          if (nsp > 980) { b.vx = b.vx / nsp * 980; b.vy = b.vy / nsp * 980; }
+          if (bd < 30) {
+            bullets.splice(i, 1);
+            bulletPool.push(b);
+            continue;
+          }
+        }
+      }
 
       if (b.life <= 0 || b.x < -60 || b.x > W + 60 || b.y < -60 || b.y > H + 60) {
         bullets.splice(i, 1);
@@ -3289,6 +3444,31 @@
 
     for (var i = 0; i < bullets.length; i++) {
       var b = bullets[i];
+
+      if (b.boomerang) {
+        ctx.save();
+        ctx.globalAlpha = 1;
+        ctx.translate(b.x, b.y);
+        ctx.rotate(b.spin || 0);
+        ctx.strokeStyle = b.color;
+        ctx.lineWidth = 2.6;
+        ctx.shadowColor = b.color;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        for (var bq = 0; bq < 4; bq++) {
+          var ba = (bq / 4) * TAU;
+          ctx.moveTo(Math.cos(ba) * b.r, Math.sin(ba) * b.r);
+          ctx.lineTo(Math.cos(ba + 0.95) * (b.r * 1.95), Math.sin(ba + 0.95) * (b.r * 1.95));
+        }
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(0, 0, b.r * 0.5, 0, TAU);
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.restore();
+        continue;
+      }
 
       ctx.globalAlpha = 0.5;
       ctx.strokeStyle = b.color;
@@ -3738,6 +3918,19 @@
 
     var out = [];
     if (modPool.length) out.push(modPool.splice(Math.floor(Math.random() * modPool.length), 1)[0]);
+
+    // 保证至少一张成长卡（新武器 / 武器强化）
+    var growthPool = [];
+    for (var gq = 0; gq < otherPool.length; gq++) {
+      var gk = otherPool[gq].kind;
+      if (gk === 'weapon' || gk === 'upgrade') growthPool.push(gq);
+    }
+    if (growthPool.length && out.length < 4) {
+      var gp = growthPool[Math.floor(Math.random() * growthPool.length)];
+      out.push(otherPool[gp]);
+      otherPool.splice(gp, 1);
+    }
+
     while (out.length < 4 && otherPool.length > 0) {
       out.push(otherPool.splice(Math.floor(Math.random() * otherPool.length), 1)[0]);
     }
@@ -4196,6 +4389,7 @@
        updateFloaters(dt);
        updateSparks(dt);
         updateShockwaves(dt);
+        updateShockFlashes(dt);
         updatePulses(dt);
 
         game.shake *= Math.exp(-6 * dt);
@@ -5674,6 +5868,7 @@
     }
 
         drawShockwaves();
+        drawShockFlashes();
         drawPulses();
        drawHitboxes();
            drawSparks();
