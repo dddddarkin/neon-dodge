@@ -1396,7 +1396,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.0.1';
+      verEl.textContent = 'v4.1.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -2039,6 +2039,79 @@
     }
   }
 
+  /* ==================== 敌方弹幕（镜像 Boss） ==================== */
+  var foeShots = [];
+
+  function spawnFoeShot(x, y, ang, speed, r, color) {
+    foeShots.push({ x: x, y: y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, r: r || 5, life: 6, color: color || '#8ef4ff' });
+  }
+
+  function updateFoeShots(dt) {
+    for (var i = foeShots.length - 1; i >= 0; i--) {
+      var s = foeShots[i];
+      s.x += s.vx * dt;
+      s.y += s.vy * dt;
+      s.life -= dt;
+      if (s.life <= 0 || s.x < -60 || s.x > W + 60 || s.y < -60 || s.y > H + 60) {
+        foeShots.splice(i, 1);
+        continue;
+      }
+      if (game.mode !== 'play') continue;
+      var rr = s.r + player.r * 0.72;
+      if (dist2(s.x, s.y, player.x, player.y) < rr * rr) {
+        foeShots.splice(i, 1);
+        damage();
+      }
+    }
+  }
+
+  function drawFoeShots() {
+    if (!foeShots.length) return;
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (var i = 0; i < foeShots.length; i++) {
+      var s = foeShots[i];
+      ctx.globalAlpha = 0.55;
+      ctx.strokeStyle = s.color;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(s.x, s.y);
+      ctx.lineTo(s.x - s.vx * 0.02, s.y - s.vy * 0.02);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.shadowColor = s.color;
+      ctx.shadowBlur = 14;
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, TAU);
+      ctx.fillStyle = '#ffffff';
+      ctx.fill();
+      ctx.shadowBlur = 0;
+    }
+    ctx.restore();
+  }
+
+  /* 镜像：照着你手上的武器回敬你 */
+  function mirrorFire(b) {
+    var w = player.weapons[0];
+    var type = w ? w.type : 'pulse';
+    var cx = b.x, cy = b.y + b.r * 0.55;
+    var ang = Math.atan2(player.y - cy, player.x - cx);
+
+    if (type === 'shotgun') {
+      for (var i = 0; i < 5; i++) spawnFoeShot(cx, cy, ang + (i - 2) * 0.16, 340, 4.5, '#ffd166');
+    } else if (type === 'laser') {
+      spawnFoeShot(cx, cy, ang, 620, 6, '#ff5c8a');
+      spawnFoeShot(cx - 12, cy, ang, 620, 6, '#ff5c8a');
+    } else if (type === 'boomerang') {
+      spawnFoeShot(cx, cy, ang - 0.34, 300, 6, '#7fffd4');
+      spawnFoeShot(cx, cy, ang + 0.34, 300, 6, '#7fffd4');
+    } else if (type === 'shock') {
+      spawnFoeShot(cx, cy, ang, 400, 8, '#ffb347');
+    } else {
+      for (var k = -1; k <= 1; k++) spawnFoeShot(cx, cy, ang + k * 0.2, 380, 5, '#8ef4ff');
+    }
+  }
+
   function releaseShockwave(x, y, radius, dmg) {
     shockwaves.push({ x: x, y: y, r: 12, max: radius, life: 0.34, maxLife: 0.34 });
 
@@ -2377,8 +2450,18 @@
 
   var BOSS_KINDS = ['mother', 'twin', 'gravity', 'final'];
 
-    function bossKindByChapter() {
-    return BOSS_KINDS[themeIndex() - 1];
+  var BOSS_POOL = [
+    ['mother', 'parasite'],
+    ['twin', 'mirror'],
+    ['gravity', 'parasite'],
+    ['final', 'mirror']
+  ];
+
+  function bossKindByChapter() {
+    var idx = themeIndex() - 1;
+    var pool = BOSS_POOL[idx] || BOSS_POOL[0];
+    if (pool.length === 1) return pool[0];
+    return sRand(0, 1) < 0.5 ? pool[0] : pool[1];
   }
 
 
@@ -2386,11 +2469,15 @@
     if (b.kind === 'twin') return '#ffd166';
     if (b.kind === 'gravity') return '#a06bff';
     if (b.kind === 'final') return '#ff3e6c';
+    if (b.kind === 'parasite') return '#7cffb2';
+    if (b.kind === 'mirror') return '#8ef4ff';
     return '#ff5c8a';
   }
 
   function bossName(kind) {
     if (kind === 'twin') return '双核母体';
+    if (kind === 'parasite') return '寄生体';
+    if (kind === 'mirror') return '镜像';
     if (kind === 'gravity') return '引力核心';
     if (kind === 'final') return '终焉';
     return '陨石母体';
@@ -2410,6 +2497,8 @@
     if (kind === 'twin') hp = 4;
     else if (kind === 'gravity') hp = 6;
     else if (kind === 'final') hp = 9;
+    else if (kind === 'parasite') hp = 6;
+    else if (kind === 'mirror') hp = 7;
 
     var loop = Math.floor((game.chapter - 1) / 4);
     hp += loop * 2;
@@ -2429,6 +2518,7 @@
       ghost: hp,
       phase: 1,
       maxPhase: (kind === 'final') ? 3 : 1,
+      shield: (kind === 'parasite') ? 1 : 0,
       coreSide: 1,
       vx: sRand(70, 110) * (Math.random() < 0.5 ? 1 : -1),
       open: false,
@@ -2650,6 +2740,32 @@
           b.spawnT = 3.8;
           b.pullT = 0.9;
           banner('引 力 拉 扯', '#b9a6ff');
+        }
+      } else if (b.kind === 'parasite') {
+        b.spawnT = 2.7;
+        if (!alt) {
+          // 吸取危险值，转成护盾
+          if (game.danger > 0 && game.burstT <= 0) {
+            var drain = Math.min(game.danger, 15);
+            game.danger -= drain;
+            if (drain >= 8) {
+              b.shield = Math.min(2, (b.shield || 0) + 1);
+              addFloater(player.x, player.y - 36, '危 险 值 −' + Math.round(drain), '#7cffb2', 13);
+            }
+          }
+          spawnHoming();
+          spawnHoming();
+        } else {
+          spawnMeteorAt(b.x + sRand(-40, 40), b.y + b.r * 0.5, sRand(12, 17), sRand(180, 240), 'rock');
+        }
+      } else if (b.kind === 'mirror') {
+        b.spawnT = 2.3;
+        if (!alt) {
+          mirrorFire(b);
+        } else {
+          mirrorFire(b);
+          mirrorFire(b);
+          banner('镜 像 · 复 制', '#8ef4ff');
         }
       } else if (b.kind === 'final') {
         if (b.atkIdx % 3 === 0) {
@@ -4221,7 +4337,19 @@
       var bodyD = hyp(p.x - b.x, p.y - b.y);
 
       if (bd < b.r * 0.58) {
-        if (b.open && p.dashTime > 0 && b.hurtT <= 0) { hitBoss(); return; }
+        if (b.open && p.dashTime > 0 && b.hurtT <= 0) {
+          if ((b.shield || 0) > 0) {
+            b.shield -= 1;
+            b.hurtT = 0.7;
+            addFloater(b.x, b.y + b.r * 0.5, '护 盾 破 碎', '#7cffb2', 15);
+            burst(coreP.x, coreP.y, '#7cffb2', 16, 300);
+            Sound.shieldBreak();
+            game.shake = Math.max(game.shake || 0, 6);
+            return;
+          }
+          hitBoss();
+          return;
+        }
         damage();
         return;
       } else if (bodyD < b.r * 0.95) {
@@ -4389,6 +4517,7 @@
        updateFloaters(dt);
        updateSparks(dt);
         updateShockwaves(dt);
+        updateFoeShots(dt);
         updateShockFlashes(dt);
         updatePulses(dt);
 
@@ -4977,6 +5106,23 @@
       ctx.stroke();
     }
 
+        if ((b.shield || 0) > 0) {
+      ctx.beginPath();
+      for (var sh = 0; sh <= 6; sh++) {
+        var sa = (sh / 6) * TAU - Math.PI / 2;
+        var sx = Math.cos(sa) * b.r * 1.34;
+        var sy = Math.sin(sa) * b.r * 1.34;
+        if (sh === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
+      }
+      ctx.closePath();
+      ctx.strokeStyle = 'rgba(124,255,178,0.75)';
+      ctx.lineWidth = 2.5;
+      ctx.shadowColor = 'rgba(124,255,178,0.9)';
+      ctx.shadowBlur = 16;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+    }
+
     if (b.loop > 0) {
       var marks = Math.min(6, b.loop * 2);
       for (var mk = 0; mk < marks; mk++) {
@@ -5325,7 +5471,9 @@
     mother: { accent: '255,70,110', hot: '255,150,175', blades: 8, title: '核 心 · 敞 开', sub: '距 离 归 零 · 判 定 已 解 除' },
     twin: { accent: '255,62,165', hot: '255,175,220', blades: 6, title: '双 核 · 同 步', sub: '两 个 弱 点 · 同 时 暴 露' },
     gravity: { accent: '124,107,255', hot: '190,175,255', blades: 8, title: '引 力 · 失 效', sub: '它 不 能 再 推 开 你' },
-    final: { accent: '255,43,61', hot: '255,140,150', blades: 10, title: '终 焉 · 睁 眼', sub: '最 后 一 次 贴 脸' }
+    final: { accent: '255,43,61', hot: '255,140,150', blades: 10, title: '终 焉 · 睁 眼', sub: '最 后 一 次 贴 脸' },
+    parasite: { accent: '124,255,178', hot: '200,255,220', blades: 7, title: '寄 生 · 断 供', sub: '它 吸 走 的 都 要 还 回 来' },
+    mirror: { accent: '142,244,255', hot: '220,250,255', blades: 9, title: '镜 像 · 破 面', sub: '你 的 武 器 也 会 背 叛 你' }
   };
 
   function drawCutIn() {
@@ -5868,6 +6016,7 @@
     }
 
         drawShockwaves();
+        drawFoeShots();
         drawShockFlashes();
         drawPulses();
        drawHitboxes();
@@ -6410,6 +6559,7 @@
     game.lastGrade = '';
 
     game.shopOffers = [];
+    foeShots.length = 0;
     applyUnlocks();
     startWave();
     if (game.mut) {
