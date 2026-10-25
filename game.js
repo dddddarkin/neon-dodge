@@ -59,6 +59,149 @@
     if (md.shieldMax) player.mods.shieldMax = Math.max(1, player.mods.shieldMax + md.shieldMax);
   }
 
+  /* ==================== 危险值系统：越赌越强 ==================== */
+  var DANGER_MAX = 100;
+  var DANGER_DECAY = 6;         // 停滞 2 秒后每秒流失
+  var DANGER_HIT_LOSS = 35;     // 受一击损失（不清零）
+  var BURST_DUR = 3;            // 爆发时长（秒）
+  var BURST_MUL = 2;            // 爆发伤害倍率（与距离倍率叠乘）
+
+  function addDanger(v) {
+    if (game.mode !== 'play' || game.burstT > 0) return;
+    game.danger = clamp((game.danger || 0) + v, 0, DANGER_MAX);
+    game.dangerIdle = 0;
+    if (game.danger >= DANGER_MAX) releaseDanger();
+  }
+
+  function releaseDanger() {
+    if (game.burstT > 0) return;
+    game.burstT = BURST_DUR;
+    game.danger = DANGER_MAX;
+    game.dangerIdle = 0;
+    game.shake = Math.max(game.shake || 0, 14);
+    game.flash = Math.max(game.flash || 0, 0.3);
+    game.hitstop = Math.max(game.hitstop || 0, 0.08);
+    releaseShockwave(player.x, player.y, 300, 0);
+    releaseShockwave(player.x, player.y, 170, 0);
+    burst(player.x, player.y, '#ff2b3d', 34, 520);
+    burst(player.x, player.y, '#ffffff', 12, 300);
+    Sound.dangerBurst();
+    if (!game.dangerTaught) {
+      game.dangerTaught = true;
+      addFloater(player.x, player.y - 54, '危 险 值 · 满', '#ff5c8a', 16);
+      addFloater(player.x, player.y - 30, '伤 害 ×2', '#ffd166', 22);
+    }
+  }
+
+  /* ==================== 精英陨石词缀 ==================== */
+  var ELITES = ['split', 'swift', 'mag', 'shield'];
+
+  function rollElite(m) {
+    if (game.wave < 5) return;                                   // 第 1 章不出
+    var chance = Math.min(0.34, 0.06 + (game.wave - 4) * 0.02);
+    if (Math.random() > chance) return;
+    var e = ELITES[Math.floor(Math.random() * ELITES.length)];
+    m.elite = e;
+    if (e === 'swift') { m.vx *= 1.25; m.vy *= 1.6; }
+    if (e === 'shield') { m.armor = 1; }
+    if (e === 'split') { m.r *= 1.12; m.hitR = m.r * 0.84; }
+  }
+
+  function updateDanger(dt) {
+    if (game.mode !== 'play') return;
+
+    if (game.burstT > 0) {
+      game.burstT = Math.max(0, game.burstT - dt);
+      game.danger = DANGER_MAX * (game.burstT / BURST_DUR);
+      if (game.burstT <= 0) { game.burstT = 0; game.danger = 0; }
+      return;
+    }
+
+    // 磁暴精英：贴得越近，充能被抽得越快
+    for (var i = 0; i < meteors.length; i++) {
+      var em = meteors[i];
+      if (em.elite !== 'mag') continue;
+      if (hyp(em.x - player.x, em.y - player.y) - em.r < 150) {
+        game.danger = Math.max(0, (game.danger || 0) - 10 * dt);
+      }
+    }
+
+    // 持续贴脸：每 0.5 秒 +1.5（合 3/秒）
+    var near = false;
+    for (var j = 0; j < meteors.length; j++) {
+      var mm = meteors[j];
+      if (mm.teach) continue;
+      if (hyp(mm.x - player.x, mm.y - player.y) - (mm.r || 0) <= RANGE_NEAR) { near = true; break; }
+    }
+    if (near) {
+      game.dangerSus = (game.dangerSus || 0) + dt;
+      if (game.dangerSus >= 0.5) { game.dangerSus = 0; addDanger(1.5); }
+    } else {
+      game.dangerSus = 0;
+    }
+
+    // 停滞衰减
+    game.dangerIdle = (game.dangerIdle || 0) + dt;
+    if (game.dangerIdle > 2 && game.danger > 0) {
+      game.danger = Math.max(0, game.danger - DANGER_DECAY * dt);
+    }
+  }
+
+  function drawDangerRing() {
+    if (game.mode !== 'play') return;
+
+    var px = player.x, py = player.y;
+    var t = performance.now() * 0.001;
+    var ratio = clamp((game.danger || 0) / DANGER_MAX, 0, 1);
+    var bursting = game.burstT > 0;
+    if (ratio <= 0.005 && !bursting) return;
+
+    ctx.save();
+    ctx.translate(px, py);
+
+    var R = 34;
+    var a0 = -Math.PI / 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, R, a0, a0 + TAU * (bursting ? 1 : ratio));
+    ctx.lineCap = 'round';
+
+    if (bursting) {
+      ctx.strokeStyle = 'rgba(255,43,61,' + (0.75 + 0.25 * Math.sin(t * 22)).toFixed(2) + ')';
+      ctx.shadowColor = 'rgba(255,20,50,0.95)';
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 3.4;
+    } else if (ratio >= 0.999) {
+      ctx.strokeStyle = 'rgba(255,255,255,' + (0.8 + 0.2 * Math.sin(t * 10)).toFixed(2) + ')';
+      ctx.shadowColor = 'rgba(255,255,255,0.9)';
+      ctx.shadowBlur = 16;
+      ctx.lineWidth = 3;
+    } else {
+      var k = ratio;
+      ctx.strokeStyle = 'rgba(' + Math.round(57 + k * 198) + ',' + Math.round(246 - k * 180) + ',' + Math.round(255 - k * 140) + ',0.85)';
+      ctx.shadowColor = 'rgba(57,246,255,0.7)';
+      ctx.shadowBlur = 10;
+      ctx.lineWidth = 2.6;
+    }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    if (bursting) {
+      ctx.globalCompositeOperation = 'lighter';
+      for (var s = 0; s < 6; s++) {
+        var ang = t * 4 + s * (TAU / 6);
+        var rr = R + 6 + (s % 3) * 7;
+        ctx.beginPath();
+        ctx.arc(Math.cos(ang) * rr, Math.sin(ang) * rr, 1.8, 0, TAU);
+        ctx.fillStyle = 'rgba(255,90,110,0.8)';
+        ctx.fill();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
+
+    ctx.restore();
+  }
+
+
 
       function escapeHTML(s) {
         return String(s).replace(/[&<>"']/g, function (c) {
@@ -747,6 +890,11 @@
           bossOpen: function () { tone(420, 900, 0.3, 'triangle', 0.09); tone(640, 1280, 0.3, 'sine', 0.06, 0.06); },
           bossHit: function () { noise(0.4, 0.24, 1800, 80, 'lowpass'); tone(140, 45, 0.4, 'sawtooth', 0.14); },
           execTick: function () { tone(220, 90, 0.14, 'sine', 0.16); },
+    dangerBurst: function () {
+      tone(110, 520, 0.34, 'sawtooth', 0.2);
+      tone(72, 220, 0.52, 'sine', 0.18, 0.04);
+      noise(0.22, 0.1, 1800, 300, 'highpass');
+    },
           execGo: function () { tone(520, 1560, 0.35, 'triangle', 0.16); tone(120, 60, 0.5, 'sawtooth', 0.1); },
           bossDie: function () {
             noise(1.1, 0.3, 2200, 40, 'lowpass');
@@ -1104,7 +1252,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v2.6.0';
+      verEl.textContent = 'v3.0.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -1419,7 +1567,9 @@
         var r = sRand(12, 29);
         var x = sRand(r * 1.4, W - r * 1.4);
         var speed = (155 + Math.min(game.time * 7, 400) + sRand(0, 70)) * mutVal('meteorSpeed', 1);
-        meteors.push(makeMeteor(x, -r - 24, r, sRand(-55, 55), speed, 'rock'));
+        var m = makeMeteor(x, -r - 24, r, sRand(-55, 55), speed, 'rock');
+        rollElite(m);
+        meteors.push(m);
       }
 
       function spawnMeteorAt(x, y, r, vy, kind) {
@@ -1536,7 +1686,14 @@
           }
         }
 
+        if (m.elite === 'split') {
+          for (var spl = 0; spl < 2; spl++) {
+            spawnMeteorAt(m.x + rand(-14, 14), m.y + rand(-6, 12), Math.max(9, m.r * 0.55), Math.abs(m.vy) * 0.9 + 40, 'rock');
+          }
+        }
+
             if (byDash) {
+      addDanger(12);
       game.shatters++;
       game.dashKills = (game.dashKills || 0) + 1;
       addCombo(2);
@@ -2533,9 +2690,18 @@
     var m = meteors[index];
     if (!m) return;
 
+    if (game.burstT > 0) dmg = dmg * BURST_MUL;
     dmg = dmg * (game.debugDmgMul || 1);
     var rm = rangeMul(m.x, m.y, m.r);
     dmg = dmg * rm;
+    if (m.armor > 0) {
+      m.armor -= 1;
+      m.flashUntil = performance.now() + 140;
+      burst(m.x, m.y, '#8ef4ff', 8, 190);
+      addSparks(m.x, m.y, 8, '#8ef4ff');
+      Sound.shieldBreak();
+      return;
+    }
     if (m.hp === undefined) {
       m.maxHp = Math.max(1, Math.round(m.r / 6)) +
                 (m.kind === 'homing' ? 2 : 0) +
@@ -2552,6 +2718,7 @@
       addFloater(m.x, m.y - m.r * 0.5, String(Math.round(dmg)) + nearTxt, rm > 1.01 ? '#ffd166' : '#dff6ff', 13);
     }
         if (m.hp <= 0) {
+      if (rm >= 1.49) addDanger(6);
       var killScore = Math.round(14 * getMult() * rm);
                 addFloater(m.x, m.y - m.r * 0.6, '+' + killScore, '#ffd166', 18);
       addSparks(m.x, m.y, 9, '#ffd166');
@@ -3383,6 +3550,7 @@
         function damage() {
     var p = player;
     if (p.invuln > 0 || game.debugInv) return false;
+    if (game.burstT <= 0) game.danger = Math.max(0, (game.danger || 0) - DANGER_HIT_LOSS);
     breakCombo();
     game.waveDamaged = true;
 
@@ -3444,6 +3612,7 @@
           if (d2 < grazeR * grazeR && m.grazeCd <= 0 && p.invuln <= 0) {
             m.grazeCd = 0.4;
             game.grazes++;
+            addDanger(7);
             addCombo(1);
             addScore(10 * getMult() * mods.grazeMul);
             game.flash = Math.max(game.flash, 0.1);
@@ -3622,6 +3791,7 @@
         updateWarns(wdt);
         updateBoss(wdt);
       updateTeach(dt);
+      updateDanger(dt);
 
         collisions();
 
@@ -3811,6 +3981,37 @@
       ctx.stroke();
       ctx.restore();
     }
+
+    // 危险值爆发：飞船变红
+    if (game.burstT > 0) {
+      var bt = performance.now() * 0.006;
+      var glow = 0.55 + 0.25 * Math.sin(bt * 4);
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.globalCompositeOperation = 'lighter';
+      var bg = ctx.createRadialGradient(0, 0, 2, 0, 0, 36);
+      bg.addColorStop(0, 'rgba(255,70,90,' + glow.toFixed(2) + ')');
+      bg.addColorStop(0.45, 'rgba(255,24,64,' + (glow * 0.4).toFixed(2) + ')');
+      bg.addColorStop(1, 'rgba(255,0,40,0)');
+      ctx.fillStyle = bg;
+      ctx.beginPath();
+      ctx.arc(0, 0, 36, 0, TAU);
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+
+      ctx.rotate(bt);
+      ctx.strokeStyle = 'rgba(255,110,130,' + (0.65 + 0.3 * Math.sin(bt * 3)).toFixed(2) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (var bj = 0; bj < 3; bj++) {
+        var ba = (bj / 3) * TAU - Math.PI / 2;
+        var bx = Math.cos(ba) * (p.r + 8), by = Math.sin(ba) * (p.r + 8);
+        if (bj === 0) ctx.moveTo(bx, by); else ctx.lineTo(bx, by);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   function drawTouchTarget() {
@@ -3909,6 +4110,51 @@
         ctx.arc(0, 0, m.r * 0.3, 0, TAU);
         ctx.fillStyle = 'rgba(255,190,225,0.9)';
         ctx.fill();
+      }
+
+      if (m.elite) {
+        var et = performance.now() * 0.004;
+        if (m.elite === 'shield' && m.armor > 0) {
+          ctx.beginPath();
+          for (var hi = 0; hi <= 6; hi++) {
+            var ha = (hi / 6) * TAU + m.rot * 0.3;
+            var hx = Math.cos(ha) * m.r * 1.24, hy = Math.sin(ha) * m.r * 1.24;
+            if (hi === 0) ctx.moveTo(hx, hy); else ctx.lineTo(hx, hy);
+          }
+          ctx.closePath();
+          ctx.strokeStyle = 'rgba(142,244,255,0.85)';
+          ctx.lineWidth = 2;
+          ctx.shadowColor = 'rgba(142,244,255,0.8)';
+          ctx.shadowBlur = 12;
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        } else if (m.elite === 'mag') {
+          ctx.beginPath();
+          ctx.arc(0, 0, m.r * 1.9, 0, TAU);
+          ctx.strokeStyle = 'rgba(185,166,255,' + (0.25 + 0.15 * Math.sin(et)).toFixed(2) + ')';
+          ctx.lineWidth = 1.5;
+          ctx.setLineDash([4, 6]);
+          ctx.lineDashOffset = -et * 20;
+          ctx.stroke();
+          ctx.setLineDash([]);
+        } else if (m.elite === 'split') {
+          ctx.beginPath();
+          ctx.moveTo(-m.r * 0.5, -m.r * 0.5);
+          ctx.lineTo(m.r * 0.5, m.r * 0.1);
+          ctx.lineTo(-m.r * 0.2, m.r * 0.6);
+          ctx.strokeStyle = 'rgba(255,120,150,0.9)';
+          ctx.lineWidth = 1.6;
+          ctx.stroke();
+        } else if (m.elite === 'swift') {
+          ctx.globalCompositeOperation = 'lighter';
+          for (var gi = 1; gi <= 2; gi++) {
+            ctx.beginPath();
+            ctx.arc(0, -m.r * 0.9 * gi, Math.max(2, m.r * (0.5 - gi * 0.12)), 0, TAU);
+            ctx.fillStyle = 'rgba(255,62,165,' + (0.18 / gi).toFixed(3) + ')';
+            ctx.fill();
+          }
+          ctx.globalCompositeOperation = 'source-over';
+        }
       }
       ctx.restore();
     }
@@ -4972,6 +5218,7 @@
     drawBoss();
 
     if (game.mode === 'play') {
+      drawDangerRing();
       drawRangeRing();
       drawShip();
       drawTouchTarget();
@@ -5500,6 +5747,10 @@
     game.victoryOpen = false;
     game.boss = null;
     game.mat = 0;
+    game.danger = 0;
+    game.burstT = 0;
+    game.dangerIdle = 0;
+    game.dangerSus = 0;
     game.threatBonus = 0;
     game.shopOpen = false;
     game.shopDelay = 0;

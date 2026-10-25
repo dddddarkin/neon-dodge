@@ -1,0 +1,10 @@
+name = "neon-dodge-scores"
+main = "index.js"
+compatibility_date = "2026-10-24"
+
+# KV 命名空间：CF 账号 3345014808@qq.com
+[[kv_namespaces]]
+binding = "SCORES"
+id = "707187f7bcac4fd1892b0927b499cbe3"
+
+# 免费版使用 *.workers.dev 子域，不占用自定义域名

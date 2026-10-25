@@ -4,3 +4,6 @@ _grep.js
 *.log
 
 _api_*.js
+worker/node_modules/
+worker/.wrangler/
+*.log
