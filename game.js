@@ -401,7 +401,7 @@
           icon: '<path d="M32 17a12 12 0 0 0-22-4"/><path d="M8 23a12 12 0 0 0 22 4"/><circle cx="20" cy="20" r="3.4" fill="currentColor" stroke="none"/>' },
         { id: 'score5000', name: '五千里程', desc: '单局得分达到 5000',
           icon: '<path d="M7 28a13 13 0 0 1 26 0"/><path d="M20 28l6-10"/><circle cx="20" cy="28" r="2.2" fill="currentColor" stroke="none"/><path d="M11 28h2M27 28h2"/>' },
-        { id: 'clear', name: '通关者', desc: '完成 4 章主线',
+        { id: 'clear', name: '通关者', desc: '完成 6 章主线',
           icon: '<path d="M20 5l13 11-13 19L7 16z"/><path d="M7 16h26"/><path d="M20 5l-6 11 6 19 6-19z"/>' }
 
       ];
@@ -1396,7 +1396,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.1.0';
+      verEl.textContent = 'v4.2.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -2454,7 +2454,9 @@
     ['mother', 'parasite'],
     ['twin', 'mirror'],
     ['gravity', 'parasite'],
-    ['final', 'mirror']
+    ['final', 'mirror'],
+    ['gravity', 'twin'],
+    ['final', 'mother']
   ];
 
   function bossKindByChapter() {
@@ -2500,7 +2502,7 @@
     else if (kind === 'parasite') hp = 6;
     else if (kind === 'mirror') hp = 7;
 
-    var loop = Math.floor((game.chapter - 1) / 4);
+    var loop = Math.floor((game.chapter - 1) / CHAPTERS.length);
     hp += loop * 2;
     hp = Math.max(2, Math.round(hp * mutVal('bossHp', 1)));
 
@@ -3680,6 +3682,16 @@
       name: '离子风暴', accent: '#ff3e6c',
       sky: ['#170409', '#1e050b', '#26060e'],
       meteor: ['#ff3e6c', '#ff5c8a', '#ff9ecb', '#ffd166']
+    },
+    {
+      name: '熔渣海', accent: '#ffb347',
+      sky: ['#150c04', '#1d1006', '#240608'],
+      meteor: ['#ffb347', '#ff8a3d', '#ffd166', '#ff5c3d']
+    },
+    {
+      name: '回声壁', accent: '#8ef4ff',
+      sky: ['#040a12', '#061018', '#08141c'],
+      meteor: ['#8ef4ff', '#39f6ff', '#b9e6ff', '#7fffd4']
     }
   ];
 
@@ -3704,6 +3716,7 @@
 
 
   var WAVE_TIME = 22;
+  var TOTAL_WAVES = 24;
 
     function waveChapter(w) {
     return Math.floor((w - 1) / 4) + 1;
@@ -3780,7 +3793,7 @@
     }
     for (var j = warns.length - 1; j >= 0; j--) warns.splice(j, 1);
 
-    if (game.wave === 16 && !game.cleared) {
+    if (game.wave === TOTAL_WAVES && !game.cleared) {
       game.cleared = true;
       addScore(3000);
       unlock('clear');
