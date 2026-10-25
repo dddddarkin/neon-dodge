@@ -24,6 +24,42 @@
     if (d <= RANGE_FAR) return RANGE_MUL_FAR;
     return 1;
   }
+
+  /* ==================== 每日挑战：今日词缀 ==================== */
+  var DAILY_MODS = [
+    { id: 'gale', name: '疾风', desc: '陨石速度 +30%，材料 +50%', meteorSpeed: 1.3, matGain: 1.5 },
+    { id: 'frail', name: '贫血', desc: 'Boss 血量 -40%', bossHp: 0.6 },
+    { id: 'face', name: '贴脸盛宴', desc: '贴脸倍率 ×2，护盾上限 -1', nearMul: 2.0, shieldMax: -1 },
+    { id: 'narrow', name: '窄门', desc: '陨石墙缺口减半', gapMul: 0.5 }
+  ];
+
+  function todayMod() {
+    // ?mod=gale 可直接预览某个词缀（也方便自动化测试）
+    var q = location.search.match(/[?&]mod=([a-z]+)/);
+    if (q) {
+      for (var j = 0; j < DAILY_MODS.length; j++) {
+        if (DAILY_MODS[j].id === q[1]) return DAILY_MODS[j];
+      }
+    }
+    var i = Math.abs(hashStr('mod-' + todayKey())) % DAILY_MODS.length;
+    return DAILY_MODS[i];
+  }
+
+  function mutVal(k, def) {
+    return (game.mut && game.mut[k]) || def;
+  }
+
+  function applyDailyMods() {
+    RANGE_MUL_NEAR = 1.5;
+    game.mut = null;
+    if (!game.daily) return;
+    var md = todayMod();
+    game.mut = md;
+    if (md.nearMul) RANGE_MUL_NEAR = md.nearMul;
+    if (md.shieldMax) player.mods.shieldMax = Math.max(1, player.mods.shieldMax + md.shieldMax);
+  }
+
+
       function escapeHTML(s) {
         return String(s).replace(/[&<>"']/g, function (c) {
           return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
@@ -1068,7 +1104,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v2.5.0';
+      verEl.textContent = 'v2.6.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -1382,7 +1418,7 @@
       function spawnMeteor() {
         var r = sRand(12, 29);
         var x = sRand(r * 1.4, W - r * 1.4);
-        var speed = 155 + Math.min(game.time * 7, 400) + sRand(0, 70);
+        var speed = (155 + Math.min(game.time * 7, 400) + sRand(0, 70)) * mutVal('meteorSpeed', 1);
         meteors.push(makeMeteor(x, -r - 24, r, sRand(-55, 55), speed, 'rock'));
       }
 
@@ -1408,8 +1444,8 @@
       function spawnWall() {
         var count = 9;
         var gapX = sRand(W * 0.18, W * 0.82);
-        var gapW = W * 0.15;
-        var vy = 230 + Math.min(game.time * 5, 220);
+        var gapW = W * 0.15 * mutVal('gapMul', 1);
+        var vy = (230 + Math.min(game.time * 5, 220)) * mutVal('meteorSpeed', 1);
         for (var i = 0; i < count; i++) {
           var x = ((i + 0.5) / count) * W;
           if (Math.abs(x - gapX) < gapW) continue;
@@ -1890,6 +1926,7 @@
 
     var loop = Math.floor((game.chapter - 1) / 4);
     hp += loop * 2;
+    hp = Math.max(2, Math.round(hp * mutVal('bossHp', 1)));
 
        var r = ((kind === 'final') ? 70 : 62) + Math.min(16, loop * 4);
 
@@ -2921,7 +2958,7 @@
       banner('B O S S 击 破 · ' + bg, gradeColor(bg));
       if (bg === 'S') Sound.milestone();
     } else {
-      game.mat += 8;
+      game.mat += Math.round(8 * mutVal('matGain', 1));
 
       var g = waveGrade();
       var gBonus = (g === 'S') ? 12 : (g === 'A' ? 8 : (g === 'B' ? 4 : 0));
@@ -5161,7 +5198,7 @@
       '<p class="hook-sub">越靠近危险，<b>伤害越高</b></p>' +
       '<p class="opline">' + ((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? '拖拽移动 · 双击冲刺 · 撞碎陨石' : '鼠标 / WASD 移动 · 空格冲刺 · 撞碎陨石') + '</p>' +
       '<button class="btn" id="startBtn">开 始 游 戏</button>' +
-      '<button class="btn ghost" id="dailyBtn">每 日 挑 战' + (dbest > 0 ? ' · ' + dbest : '') + '</button>' +
+      '<button class="btn ghost" id="dailyBtn">每 日 挑 战 · ' + todayMod().name + (dbest > 0 ? '　最佳 ' + dbest : '') + '</button>' +
       '<div class="lb"><div class="lb-title">本 机 前 五</div>' + boardHTML(board) + '</div>' +
             '<button class="ach-line ach-entry" id="achBtn">成 就 <b>' + achCount() + ' / ' + ACH_LIST.length + '</b><span class="ach-arrow">›</span></button>' +
       '<p class="tip">空格 开始　·　M 静音　·　P 暂停 / 查看属性</p>';
@@ -5439,12 +5476,13 @@
     canvas.classList.remove('glitch');
 
     resetPlayer();
+    applyDailyMods();
     pointer.active = false;
     pointer.down = false;
     pointer.id = null;
     keys.left = keys.right = keys.up = keys.down = false;
 
-    $modeTag.textContent = isDaily ? 'DAILY' : '';
+    $modeTag.textContent = isDaily ? ('DAILY · ' + todayMod().name) : '';
     $modeTag.classList.toggle('small', isDaily);
 
     hideOverlay();
@@ -5469,6 +5507,10 @@
 
     game.shopOffers = [];
     startWave();
+    if (game.mut) {
+      banner('今 日 · ' + game.mut.name, '#b9a6ff');
+      toast('词缀　' + game.mut.desc);
+    }
     debugSync();
 
 
