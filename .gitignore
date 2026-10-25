@@ -1,0 +1,5 @@
+*.bak
+_patch_*.js
+_grep.js
+*.log
+
