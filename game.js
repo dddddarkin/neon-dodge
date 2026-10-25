@@ -535,14 +535,14 @@
         }
 
         /* ---- BGM 乐器 ---- */
-        function bBass(t, freq, dur) {
+        function bBass(t, freq, dur, wave) {
           if (!ac || muted) return;
           var o = ac.createOscillator(), g = ac.createGain(), f = ac.createBiquadFilter();
           f.type = 'lowpass';
           f.frequency.setValueAtTime(620, t);
           f.frequency.exponentialRampToValueAtTime(180, t + dur * 0.8);
           f.Q.value = 6;
-          o.type = 'sawtooth';
+          o.type = wave || 'sawtooth';
           o.frequency.setValueAtTime(freq, t);
           g.gain.setValueAtTime(0.0001, t);
           g.gain.exponentialRampToValueAtTime(0.09, t + 0.02);
@@ -551,10 +551,10 @@
           o.start(t); o.stop(t + dur + 0.05);
         }
 
-        function bArp(t, freq) {
+        function bArp(t, freq, wave) {
           if (!ac || muted) return;
           var o = ac.createOscillator(), g = ac.createGain();
-          o.type = 'square';
+          o.type = wave || 'square';
           o.frequency.setValueAtTime(freq, t);
           g.gain.setValueAtTime(0.0001, t);
           g.gain.exponentialRampToValueAtTime(0.024, t + 0.008);
@@ -630,14 +630,94 @@
           { root: -5, third: 4, fifth: 7 },
           { root: -7, third: 4, fifth: 7 }
         ]
+      },
+      {
+        name: '熔渣海',
+        transpose: -2,
+        chords: [
+          { root: 0,  third: 3, fifth: 7 },
+          { root: 5,  third: 4, fifth: 7 },
+          { root: -3, third: 4, fifth: 7 },
+          { root: 2,  third: 3, fifth: 7 }
+        ]
+      },
+      {
+        name: '回声壁',
+        transpose: 5,
+        chords: [
+          { root: -2, third: 4, fifth: 7 },
+          { root: 3,  third: 4, fifth: 7 },
+          { root: -5, third: 3, fifth: 7 },
+          { root: 0,  third: 4, fifth: 7 }
+        ]
       }
     ];
 
-    /* ---- 主旋律动机：16 步，-1 = 休止 ---- */
-    var MELODY = [
-      12, -1, -1, 15, -1, 19, -1, -1,
-      17, -1, 15, -1, -1, 12, -1, -1
+    /* ==================== 音乐风格包（每局/每章随机） ==================== */
+    var MUSIC_STYLES = [
+      {
+        name: '霓虹脉冲', chordSet: 0, tempo: 1.0,
+        leadWave: 'triangle', arpWave: 'square', bassWave: 'sawtooth', chordWave: 'triangle',
+        kick: 'normal', hat: 'offbeat',
+        bassPat: [0, -1, 12, -1],
+        mel: [12, -1, -1, 15, -1, 19, -1, -1, 17, -1, 15, -1, -1, 12, -1, -1]
+      },
+      {
+        name: '深空回声', chordSet: 2, tempo: 0.82,
+        leadWave: 'sine', arpWave: 'triangle', bassWave: 'sine', chordWave: 'sine',
+        kick: 'sparse', hat: 'offbeat',
+        bassPat: [0, -1, -1, 12],
+        mel: [-1, 12, -1, -1, 19, -1, -1, 15, -1, -1, 12, -1, 7, -1, -1, -1]
+      },
+      {
+        name: '工业碾核', chordSet: 3, tempo: 1.22,
+        leadWave: 'sawtooth', arpWave: 'square', bassWave: 'square', chordWave: 'sawtooth',
+        kick: 'dense', hat: 'dense',
+        bassPat: [0, 0, 12, 0],
+        mel: [0, 0, 7, -1, 0, 0, 10, -1, 0, 0, 7, -1, 5, 3, 0, -1]
+      },
+      {
+        name: '冷光旋律', chordSet: 1, tempo: 1.08,
+        leadWave: 'square', arpWave: 'triangle', bassWave: 'sawtooth', chordWave: 'triangle',
+        kick: 'normal', hat: 'dense',
+        bassPat: [0, -1, 7, -1],
+        mel: [19, -1, 15, -1, 12, -1, 19, 22, 17, -1, 15, -1, 12, -1, -1, -1]
+      },
+      {
+        name: '低频压迫', chordSet: 4, tempo: 0.9,
+        leadWave: 'triangle', arpWave: 'sine', bassWave: 'sine', chordWave: 'triangle',
+        kick: 'normal', hat: 'offbeat',
+        bassPat: [0, -1, -1, -1],
+        mel: [7, -1, -1, -1, 12, -1, -1, -1, 10, -1, -1, 7, -1, -1, -1, -1]
+      },
+      {
+        name: '故障回旋', chordSet: 5, tempo: 1.14,
+        leadWave: 'square', arpWave: 'sawtooth', bassWave: 'sawtooth', chordWave: 'square',
+        kick: 'dense', hat: 'dense',
+        bassPat: [0, 1, 12, 10],
+        mel: [12, 13, -1, 15, -1, 14, 12, -1, 19, -1, 17, 15, -1, 14, -1, 12]
+      }
     ];
+
+    var MUSIC_STYLE_KEY = 'neonDodgeMusicStyle';
+
+    function musicLast() {
+      try { return localStorage.getItem(MUSIC_STYLE_KEY) || ''; } catch (e) { return ''; }
+    }
+
+    function musicPick(avoid) {
+      var cands = [];
+      for (var i = 0; i < MUSIC_STYLES.length; i++) {
+        if (MUSIC_STYLES[i].name === avoid) continue;
+        cands.push(MUSIC_STYLES[i]);
+      }
+      if (!cands.length) cands = MUSIC_STYLES.slice(0);
+      var pick = cands[Math.floor(Math.random() * cands.length)];
+      try { localStorage.setItem(MUSIC_STYLE_KEY, pick.name); } catch (e) { }
+      return pick;
+    }
+
+    /* 旧版共用旋律已移除，每个风格包自带 mel */
 
     function ensureFx() {
       if (!ac || !bgm.gain) return;
@@ -676,7 +756,7 @@
       }
     }
 
-    function bLead(t, freq, dur) {
+    function bLead(t, freq, dur, wave) {
       if (!ac || muted) return;
 
       var o = ac.createOscillator();
@@ -687,7 +767,7 @@
       f.frequency.setValueAtTime(2800, t);
       f.Q.value = 1;
 
-      o.type = 'triangle';
+      o.type = wave || 'triangle';
       o.frequency.setValueAtTime(freq, t);
 
       g.gain.setValueAtTime(0.0001, t);
@@ -704,7 +784,7 @@
       o.stop(t + dur + 0.06);
     }
 
-    function bChord(t, root, chord, pf) {
+    function bChord(t, root, chord, pf, wave) {
       if (!ac || muted) return;
 
       var g = ac.createGain();
@@ -721,7 +801,7 @@
         var o = ac.createOscillator();
         var og = ac.createGain();
 
-        o.type = i === 0 ? 'triangle' : 'sine';
+        o.type = i === 0 ? (wave || 'triangle') : 'sine';
         o.frequency.setValueAtTime(root * Math.pow(2, semis[i] / 12), t);
         og.gain.value = vols[i];
 
@@ -733,45 +813,58 @@
     }
 
 
-                    function playStep(step, t) {
+    function playStep(step, t) {
       var s16 = step % 16;
       var bar = Math.floor(step / 16) % 8;
       var ci = bar % 4;
 
-      var mi = Math.min(3, Math.max(0, (game.chapter - 1) % 4));
-      var music = CHAPTER_MUSIC[mi];
+      var st = bgm.style || MUSIC_STYLES[0];
+      var music = CHAPTER_MUSIC[st.chordSet % CHAPTER_MUSIC.length];
       var chord = music.chords[ci];
 
       var pf = Math.pow(2, bgm.pitch / 12);
-      var root = 110 * pf * Math.pow(2, chord.root / 12);
+      var root = 110 * pf * Math.pow(2, (chord.root + music.transpose) / 12);
 
-      if (s16 % 8 === 0) bKick(t);
-
-      var bassSemi = (s16 % 4 === 0) ? 0 : ((s16 % 4 === 2) ? 12 : -1);
-      if (bassSemi >= 0) {
-        bBass(t, root * Math.pow(2, bassSemi / 12), STEP_DUR * 1.8);
+      // 鼓
+      if (st.kick === 'dense') {
+        if (s16 % 4 === 0) bKick(t);
+      } else if (st.kick === 'sparse') {
+        if (s16 === 0) bKick(t);
+      } else {
+        if (s16 % 8 === 0) bKick(t);
       }
 
+      // 贝斯
+      var bs = st.bassPat[s16 % 4];
+      if (bs >= 0) bBass(t, root * Math.pow(2, bs / 12), STEP_DUR * 1.8, st.bassWave);
+
+      // 琶音
       if (bgm.level >= 1 && s16 % 2 === 0) {
         var arpNotes = [chord.root, chord.root + chord.third, chord.root + chord.fifth, chord.root + 12];
         var an = arpNotes[Math.floor(step / 2) % arpNotes.length];
         var oct = (bar >= 4) ? 12 : 0;
-        bArp(t, 220 * pf * Math.pow(2, (an + oct) / 12));
+        bArp(t, 220 * pf * Math.pow(2, (an + oct + music.transpose) / 12), st.arpWave);
       }
 
-      if (bgm.level >= 2 && s16 % 2 === 1) bHat(t);
+      // 镨
+      if (st.hat === 'dense') {
+        if (bgm.level >= 1 || s16 % 2 === 1) bHat(t);
+      } else if (bgm.level >= 2 && s16 % 2 === 1) {
+        bHat(t);
+      }
       if (bgm.level >= 2 && bar === 7 && s16 % 2 === 0) bHat(t);
 
+      // 主旋律
       if (bar < 4 && bar % 2 === 0) {
-        var mn = MELODY[s16];
+        var mn = st.mel[s16];
         if (mn >= 0) {
           var trans = music.transpose + ((bar === 2) ? 2 : 0);
-          bLead(t, 220 * pf * Math.pow(2, (mn + trans) / 12), STEP_DUR * 2.6);
+          bLead(t, 220 * pf * Math.pow(2, (mn + trans) / 12), STEP_DUR * 2.6, st.leadWave);
         }
       }
 
       if (bgm.level >= 3) {
-        if (s16 === 0) bChord(t, root, chord, pf);
+        if (s16 === 0) bChord(t, root, chord, pf, st.chordWave);
         if (s16 % 4 === 2) bHat(t);
       }
     }
@@ -826,11 +919,12 @@
       }
 
       ensureFx();
-          bgm.pattern = Math.abs(seed | 0) % BASS_PATTERNS.length;
+          bgm.style = musicPick(musicLast());
+          bgm.pattern = 0;
           bgm.level = 0;
          bgm.step = 0;
          bgm.on = true;
-         bgm.tempo = 1;
+         bgm.tempo = bgm.style.tempo;
          bgm.pitch = 0;
           bgm.next = ac.currentTime + 0.08;
 
@@ -840,6 +934,14 @@
           bgm.gain.gain.exponentialRampToValueAtTime(1, t + 1.0);
           if (bgm.timer) clearInterval(bgm.timer);
           bgm.timer = setInterval(bgmTick, 25);
+        }
+
+        function bgmRestyle() {
+          if (!bgm.on || !ac) return;
+          bgm.style = musicPick(bgm.style ? bgm.style.name : '');
+          bgm.tempo = bgm.style.tempo;
+          bgm.step = 0;
+          bgm.next = Math.max(bgm.next, ac.currentTime + 0.05);
         }
 
         function bgmStop() {
@@ -948,6 +1050,10 @@
           choose: function () { tone(760, 1140, 0.1, 'sine', 0.12); tone(1140, 1520, 0.12, 'triangle', 0.08, 0.05); },
           bgmStart: bgmStart,
           bgmStop: bgmStop,
+        bgmRestyle: bgmRestyle,
+        musicPick: musicPick,
+        MUSIC_STYLES: MUSIC_STYLES,
+        bgmState: bgm,
           bgmPause: bgmPause,
           bgmResume: bgmResume,
           setBgmLevel: function (n) { bgm.level = n; },
@@ -1520,7 +1626,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.4.0';
+      verEl.textContent = 'v4.5.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -3852,7 +3958,7 @@
     glitch(1.3, 0.5);
     banner('第 ' + ch + ' 章 · ' + th.name, th.accent);
     buildBg();
-    Sound.bgmStart(ch - 1);
+    Sound.bgmRestyle();
   }
 
 
