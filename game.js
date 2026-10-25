@@ -130,6 +130,7 @@
           mat: 0,
           shopOpen: false,
           shopOffers: [],
+          shopRefresh: 0,
 
             waveT: 0,
             breakT: 0,
@@ -937,12 +938,12 @@
 
 
     if (game.shopOpen) {
-      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') {
-        e.preventDefault();
-        closeShop();
-      } else {
-        e.preventDefault();
-      }
+      e.preventDefault();
+      if (e.code === 'Space' || e.code === 'Enter' || e.code === 'NumpadEnter') { closeShop(); return; }
+      if (e.code === 'Digit1' || e.code === 'Numpad1') { buyOffer(0); return; }
+      if (e.code === 'Digit2' || e.code === 'Numpad2') { buyOffer(1); return; }
+      if (e.code === 'Digit3' || e.code === 'Numpad3') { buyOffer(2); return; }
+      if (e.code === 'KeyR') { refreshShop(); return; }
       return;
     }
 
@@ -1067,7 +1068,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v2.3.0';
+      verEl.textContent = 'v2.4.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -3107,9 +3108,32 @@
 
 
     game.shopOpen = true;
+    game.shopRefresh = 0;
     game.shopOffers = buildOffers();
     renderShop();
     Sound.choose();
+  }
+
+  /* ==================== 商店刷新（收费，价格递增） ==================== */
+  function refreshCost() {
+    return 6 + 4 * (game.shopRefresh || 0);
+  }
+
+  function refreshShop() {
+    if (!game.shopOpen) return;
+    var c = refreshCost();
+    if (!game.debugFreeShop && game.mat < c) { Sound.shieldBreak(); return; }
+    if (!game.debugFreeShop) game.mat -= c;
+    game.shopRefresh = (game.shopRefresh || 0) + 1;
+
+    var before = game.shopOffers.map(function (o) { return o.name; }).join('|');
+    for (var t = 0; t < 4; t++) {
+      game.shopOffers = buildOffers();
+      var after = game.shopOffers.map(function (o) { return o.name; }).join('|');
+      if (after !== before) break;      // 至少换掉一张，避免"点了个寂寞"
+    }
+    Sound.choose();
+    renderShop();
   }
 
   function renderShop() {
@@ -3147,7 +3171,7 @@
     sub.textContent = buildNames.join(' · ') +
       '　｜　护盾 ' + player.shield + '/' + player.mods.shieldMax +
       '　｜　材料 ' + game.mat;
-    hint.textContent = '点击购买　·　点「继续」或按空格进入下一波';
+    hint.textContent = '点击购买　·　R 刷新　·　空格进下一波';
 
     wrap.innerHTML = '';
 
@@ -3191,16 +3215,38 @@
       wrap.appendChild(b);
     });
 
+    var foot = document.getElementById('shopFoot');
+    if (!foot) {
+      foot = document.createElement('div');
+      foot.id = 'shopFoot';
+      foot.style.cssText = 'display:flex;gap:10px;justify-content:center;align-items:center;margin-top:18px;flex-wrap:wrap;';
+      box.querySelector('.up-inner').appendChild(foot);
+    }
+
+    var rf = document.getElementById('shopRefresh');
+    if (!rf) {
+      rf = document.createElement('button');
+      rf.id = 'shopRefresh';
+      rf.className = 'btn ghost';
+      rf.style.marginTop = '0';
+      rf.addEventListener('click', refreshShop);
+      foot.appendChild(rf);
+    }
+    var rc = refreshCost();
+    var canPay = game.debugFreeShop || game.mat >= rc;
+    rf.textContent = '刷 新 · ' + rc;
+    rf.style.opacity = canPay ? '1' : '0.42';
+
     var cont = document.getElementById('shopContinue');
     if (!cont) {
       cont = document.createElement('button');
       cont.id = 'shopContinue';
       cont.className = 'btn';
-      cont.style.marginTop = '18px';
       cont.textContent = '继 续 ▶';
       cont.addEventListener('click', closeShop);
-      box.querySelector('.up-inner').appendChild(cont);
     }
+    cont.style.marginTop = '0';
+    if (cont.parentNode !== foot) foot.appendChild(cont);
 
     box.classList.add('show');
   }
