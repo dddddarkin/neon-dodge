@@ -572,9 +572,10 @@
     }
 
     .title {
-      font-size: clamp(30px, 8vw, 58px);
-      letter-spacing: .16em;
-      font-weight: 800;
+      font-size: clamp(46px, 13.5vw, 92px);
+      letter-spacing: .22em;
+      text-indent: .22em;
+      font-weight: 900;
       color: #eafcff;
       text-shadow: 0 0 8px #fff, 0 0 22px var(--cyan), 0 0 50px rgba(57, 246, 255, .75), 0 0 90px rgba(57, 246, 255, .35);
       animation: pulse 3s ease-in-out infinite;

@@ -1067,7 +1067,7 @@
               canvas.addEventListener('pointercancel', function () { tapT = 0; });
 
       var verEl = document.createElement('div');
-      verEl.textContent = 'v2.2.0';
+      verEl.textContent = 'v2.3.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:none;z-index:99;font-variant-numeric:tabular-nums;';
       document.body.appendChild(verEl);
 
@@ -4993,7 +4993,8 @@
     var board = loadBoard(false);
 
         overlay.innerHTML =
-      '<h1 class="title">NEON DODGE</h1>' +
+      '<h1 class="title">贴脸</h1>' +
+      '<p class="sub">DANGER CLOSE</p>' +
       '<p class="hook-main">别躲。贴上去。</p>' +
       '<p class="hook-sub">越靠近危险，<b>伤害越高</b></p>' +
       '<p class="opline">' + ((window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ? '拖拽移动 · 双击冲刺 · 撞碎陨石' : '鼠标 / WASD 移动 · 空格冲刺 · 撞碎陨石') + '</p>' +
