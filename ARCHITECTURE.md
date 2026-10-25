@@ -1,0 +1,95 @@
+# 架构说明
+
+《贴脸》DANGER CLOSE · 纯前端单页游戏，零外部依赖、零构建步骤。
+
+## 文件结构
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `index.html` | ~72 | 页面骨架：canvas、HUD、底部栏、script 加载顺序 |
+| `style.css` | ~960 | 全部样式（含手机适配、`env(safe-area-inset)`） |
+| `audio.js` | ~646 | **音频模块**：程序化音乐（9 套风格）+ 全部音效，导出全局 `Sound` |
+| `game.js` | ~6505 | 其余全部：状态、更新、渲染、UI 面板、存档、调试 |
+| `worker/` | — | Cloudflare Worker 排行榜后端源码（**当前未启用**，国内 DNS 被污染） |
+| `CHANGELOG.md` | — | 每个版本的改动记录 |
+
+**加载顺序必须**是 `audio.js` → `game.js`（`game.js` 依赖全局 `Sound`）。
+
+## 三个全局对象
+
+```js
+Sound           // audio.js 导出，唯一跨文件依赖
+game            // game.js 内的主状态对象
+player          // 玩家状态
+```
+
+`game.js` 整体包在一个 IIFE 里，除 `window.__nd`（调试，仅在挂钩子时存在）外不污染全局。
+
+## 状态模型
+
+### `game`（对局 + 存档相关）
+
+| 字段 | 含义 |
+|---|---|
+| `mode` | `menu` / `play` / `over` / `dying` |
+| `wave` / `chapter` | 当前波次（1~24）、章节（1~6，无尽继续增长） |
+| `score` / `combo` / `maxMult` | 分数、连击、本局最高倍率 |
+| `mat` | 局内材料（每局清零） |
+| `danger` / `burstT` | 危险值 0~120、爆发剩余秒数 |
+| `boss` | Boss 对象或 `null`；`boss.exec` 表示处决窗口 |
+| `shopOpen` / `shopOffers` / `shopRefresh` | 商店状态 |
+| `daily` / `mut` | 每日挑战标记与今日词缀 |
+| `unl` | 本局生效的永久增益 id 数组 |
+
+### `player`
+
+`weapons[]`（每项 `{type, lv, mods:[{t,id}]}`）、`mods`（`shieldMax` / `dashCdMul` / `dmgMul` / `dangerGain` / `burstMul` / `burstShield` / `echoChance`）、`shield`、`invuln`、`dashTime`。
+
+## 系统索引（按函数名搜索）
+
+| 系统 | 关键函数 / 表 |
+|---|---|
+| 主循环 | `update(dt)` → `updateBoss` / `updateMeteors` / `updatePlayer` / `updateBullets` / `updateFoeShots` / `updatePulses` / `updateDanger` |
+| 渲染 | `render()` → `drawShip` / `drawMeteors` / `drawBullets` / `drawRangeRing` / `drawDangerRing` / `drawPulses` / `drawCutIn` / `drawExecButton` |
+| 武器 | `WEAPON_DEFS`、`WEAPON_MODS`、`wStat()`、`applyWeaponMods()`、`updateWeapons()` |
+| 距离倍率 | `rangeMul(tx,ty,tr)`、`RANGE_NEAR` / `RANGE_FAR` |
+| 危险值 | `addDanger` / `releaseDanger` / `updateDanger` / `drawDangerRing`、`DANGER_MAX` / `BURST_DUR` |
+| Boss | `BOSS_POOL`、`bossKindByChapter()`、`spawnBoss()`、`updateBoss()`、`hitBoss()`、`bossEnterExec()`、`bossExecute()`、`bossEnrage()` |
+| Boss 特写 | `CUT_KINDS`（每个 Boss 的刀叶数/配色/台词）、`drawCutIn()` |
+| 精英陨石 | `ELITES`、`rollElite()`、`drawMeteors()` 内的 `m.elite` 分支 |
+| 商店 | `buildOffers()`（保证 1 张模组卡 + 1 张成长卡）、`renderShop()`、`refreshShop()`、`buyOffer()` |
+| 局外成长 | `UNLOCK_DEFS`、`getShards()` / `grantShards()`、`buyUnlock()`、`applyUnlocks()`、`showCoreShop()` |
+| 每日挑战 | `DAILY_MODS`、`todayMod()`（支持 `?mod=id` 预览）、`applyDailyMods()` |
+| 存档 | `SAVE_KEYS`、`exportSave()` / `importSave()`、`backupNow()`、`restoreIfLost()`、`showSavePanel()` |
+| 成就 | `ACH_LIST`、`unlock()`、`checkAch()` |
+| 章节主题 | `CHAPTERS`（6 章配色）、`themeIndex()`、`chapterTheme()` |
+
+## 存档键
+
+`neonDodgeBest` · `neonDodgeAch` · `neonDodgeTop5` · `neonDodgeShards` · `neonDodgeUnlocks` · `neonDodgeName` · `neonDodgeTaught` · `neonDodgeBackup`（快照）· `neonDodgeMusicStyle` · `neonDodgeDebug`
+
+> ⚠️ 这些键**不能改名**，改了等于清零所有玩家进度。
+
+## 调试入口
+
+- **手机**：连点右下角版本号 5 次 → 暗号 `080825`（解锁后点 3 次开关面板）
+- **桌面**：`?debug=1` 或按 `` ` ``
+- 面板含：材料 +500 / 无敌 / 一击必碎 / 伤害倍率 / 刷各类敌人 / **→ 处决特写** / 跳波次
+- `?mod=gale` 可预览任意每日词缀
+
+## 代码约定
+
+1. **`ctx.save()` 与 `restore()` 必须严格配对** —— 曾因漏配对导致画面偏移 + 点击错位。
+2. **DOM 永远盖在 canvas 上**：处决特写期间要隐藏 `#hud` / `#bottom`。
+3. **音乐随机用 `Math.random`，不要用 `sRand`** —— `sRand` 是每日挑战的种子流，占用会破坏确定性。
+4. **新增武器/Boss/成就**都是纯数据 + 少量分支，参照 `WEAPON_DEFS` / `BOSS_POOL` / `ACH_LIST` 的既有形状加即可。
+
+## 发布流程
+
+1. 改 `verEl.textContent`（加功能 +0.1，修 bug +0.01）
+2. `CHANGELOG.md` 顶部加一条
+3. `node --check game.js`（和 `audio.js`）
+4. `git commit` → `git tag vX.Y.Z` → 推送
+5. 网络受限时用 `_api_push2.js`（GitHub API 推送）与 `_api_tag.js`（建 tag）
+
+线上验证：抓 `https://dddddarkin.github.io/neon-dodge/game.js` 里的 `verEl.textContent` 看版本号，Pages 重建约 45~60 秒。
