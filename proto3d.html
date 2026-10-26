@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+  <title>贴脸 · 3D 原型</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #04060c; }
+    body {
+      font: 13px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: #d8f6ff; user-select: none; -webkit-tap-highlight-color: transparent;
+      touch-action: none;
+    }
+    canvas { display: block; }
+
+    #hud {
+      position: fixed; inset: 0; pointer-events: none; padding: 16px 20px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      font-variant-numeric: tabular-nums; z-index: 2;
+    }
+    .k { font-size: 10px; letter-spacing: .18em; color: rgba(140, 200, 220, .65); display: block; }
+    .v { font-size: 26px; font-weight: 700; letter-spacing: .04em; }
+    .dim { color: rgba(190, 225, 245, .55); font-size: 18px; }
+    .right { text-align: right; }
+
+    #multWrap { margin-top: 6px; font-size: 12px; letter-spacing: .1em; color: rgba(140, 200, 220, .5); }
+    #mult { font-size: 20px; font-weight: 700; }
+
+    #lvWrap {
+      position: fixed; left: 20px; right: 20px; bottom: 22px; z-index: 2;
+      pointer-events: none;
+    }
+    #lvBar {
+      height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .1);
+      overflow: hidden; margin-top: 6px;
+    }
+    #lvFill {
+      height: 100%; width: 0%;
+      background: linear-gradient(90deg, #39f6ff, #7f7fff);
+      box-shadow: 0 0 12px rgba(57, 246, 255, .9);
+      transition: background .2s ease;
+    }
+    #lvFill.hot { background: linear-gradient(90deg, #ff2b3d, #ff8a3d); box-shadow: 0 0 16px rgba(255, 45, 65, .95); }
+    #lvTxt { font-size: 11px; letter-spacing: .16em; color: rgba(140, 200, 220, .7); }
+
+    #hint {
+      position: fixed; left: 0; right: 0; top: 50%; transform: translateY(-50%);
+      text-align: center; z-index: 3; pointer-events: none;
+      transition: opacity .5s ease;
+    }
+    #hint h1 { font-size: 30px; letter-spacing: .3em; font-weight: 700; color: #eafcff; }
+    #hint p { margin-top: 14px; font-size: 12px; letter-spacing: .12em; color: rgba(160, 210, 235, .75); line-height: 2; }
+    #hint .mech { color: #ffd166; }
+
+    #over {
+      position: fixed; inset: 0; display: none; z-index: 4;
+      align-items: center; justify-content: center; flex-direction: column;
+      background: radial-gradient(circle at 50% 45%, rgba(10, 20, 40, .6), rgba(2, 4, 10, .92) 70%);
+      text-align: center;
+    }
+    #over h2 { font-size: 12px; letter-spacing: .4em; color: rgba(255, 120, 150, .9); }
+    #over .num { font-size: 58px; font-weight: 700; margin: 10px 0 4px; color: #eafcff; text-shadow: 0 0 30px rgba(57, 246, 255, .5); }
+    #over .sub { font-size: 12px; color: rgba(170, 215, 240, .7); letter-spacing: .1em; line-height: 1.9; }
+    #again {
+      margin-top: 22px; padding: 12px 34px; border-radius: 30px; cursor: pointer;
+      background: rgba(57, 246, 255, .1); border: 1px solid rgba(57, 246, 255, .5);
+      color: #d8f6ff; font: inherit; letter-spacing: .2em;
+    }
+    #fps {
+      position: fixed; right: 12px; bottom: 10px; font-size: 10px; letter-spacing: .1em;
+      color: rgba(140, 200, 220, .35); z-index: 5;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="hud">
+    <div>
+      <span class="k">SCORE</span>
+      <span class="v" id="score">0</span>
+      <div id="multWrap">距离倍率 <span id="mult">×1.0</span></div>
+    </div>
+    <div class="right">
+      <span class="k">LIFE</span>
+      <span class="v dim" id="life">3</span>
+      <span class="k" style="margin-top:8px">KILL</span>
+      <span class="v dim" id="kill">0</span>
+    </div>
+  </div>
+
+  <div id="lvWrap">
+    <span id="lvTxt">危险值 <span id="lvNum">0</span> / 120</span>
+    <div id="lvBar"><div id="lvFill"></div></div>
+  </div>
+
+  <div id="hint">
+    <h1>贴 脸</h1>
+    <p>
+      鼠标 / WASD 移动 · 自动开火<br>
+      <span class="mech">靠近陨石表面 &lt; 2.6 → 伤害与得分 ×1.5</span><br>
+      贴脸充能危险值，满 120 自动爆发 3 秒 ×2
+    </p>
+  </div>
+
+  <div id="over">
+    <h2>飞 行 结 束</h2>
+    <div class="num" id="finalScore">0</div>
+    <div class="sub" id="finalSub"></div>
+    <button id="again">再 来 一 局</button>
+  </div>
+
+  <div id="fps">3D 原型 · 非正式版 · FPS —</div>
+
+  <script src="three.min.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      /* ==================== 常量 ==================== */
+      var DANGER_MAX = 120;
+      var BURST_DUR = 3;
+      var SHIP_R = 0.9;
+      var FIRE_INTERVAL = 0.38;
+      var RANGE_NEAR = 2.6;     // 表面距离 <= 此值 → ×1.5
+      var RANGE_FAR = 5.5;      // 表面距离 <= 此值 → ×1.2
+      var ARENA_X = 15;
+      var ARENA_Z_MIN = -19, ARENA_Z_MAX = 6;
+      var SHIP_Y = 1.5;
+
+      /* ==================== 场景 ==================== */
+      var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+      document.body.appendChild(renderer.domElement);
+
+      var scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x04060c);
+      scene.fog = new THREE.Fog(0x04060c, 20, 56);
+
+      var camera = new THREE.PerspectiveCamera(56, 1, 0.1, 200);
+      var camLook = new THREE.Vector3(0, 0, -4);
+
+      // 灯光：环境 + 主光 + 跟随飞船的点光
+      scene.add(new THREE.AmbientLight(0x3a5f8a, 1.1));
+      var key = new THREE.DirectionalLight(0xbfe9ff, 0.85);
+      key.position.set(-8, 18, 10);
+      scene.add(key);
+      var shipLight = new THREE.PointLight(0x39f6ff, 1.6, 22, 2);
+      scene.add(shipLight);
+
+      // 地面网格 + 地平线光晕
+      var grid = new THREE.GridHelper(90, 45, 0x1b3a52, 0x0d1a26);
+      grid.position.y = 0;
+      scene.add(grid);
+
+      var floorGlow = new THREE.Mesh(
+        new THREE.PlaneGeometry(90, 90),
+        new THREE.MeshBasicMaterial({ color: 0x081420, transparent: true, opacity: 0.6 })
+      );
+      floorGlow.rotation.x = -Math.PI / 2;
+      floorGlow.position.y = -0.02;
+      scene.add(floorGlow);
+
+      /* ==================== 飞船 ==================== */
+      var ship = new THREE.Group();
+      var hullMat = new THREE.MeshStandardMaterial({
+        color: 0x0f2b38, emissive: 0x39f6ff, emissiveIntensity: 1.1,
+        metalness: 0.5, roughness: 0.35
+      });
+      var hull = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.9, 4), hullMat);
+      hull.rotation.x = -Math.PI / 2;
+      hull.rotation.z = Math.PI / 4;
+      ship.add(hull);
+
+      var wingMat = new THREE.MeshStandardMaterial({
+        color: 0x0b1e28, emissive: 0x39f6ff, emissiveIntensity: 0.8, metalness: .4, roughness: .5
+      });
+      var wing = new THREE.Mesh(new THREE.BoxGeometry(2.6, 0.1, 0.55), wingMat);
+      wing.position.z = 0.35;
+      ship.add(wing);
+
+      var auraMesh = new THREE.Mesh(
+        new THREE.RingGeometry(1.15, 1.35, 32),
+        new THREE.MeshBasicMaterial({ color: 0x39f6ff, transparent: true, opacity: 0.35, side: THREE.DoubleSide })
+      );
+      auraMesh.rotation.x = -Math.PI / 2;
+      auraMesh.position.y = -SHIP_Y + 0.06;
+      ship.add(auraMesh);
+
+      ship.position.set(0, SHIP_Y, 2);
+      scene.add(ship);
+
+      /* ==================== 陨石 ==================== */
+      var meteors = [];
+      var geoCache = {};
+      function meteorGeo(r) {
+        var k = Math.round(r * 10);
+        if (!geoCache[k]) geoCache[k] = new THREE.IcosahedronGeometry(r, 0);
+        return geoCache[k];
+      }
+
+      var ringGeo = new THREE.RingGeometry(0.86, 1, 28);
+
+      // 加性发光贴图（程序化生成，零外部资源）
+      var glowTex = (function () {
+        var c = document.createElement('canvas');
+        c.width = c.height = 64;
+        var g = c.getContext('2d');
+        var grd = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+        grd.addColorStop(0, 'rgba(255,255,255,1)');
+        grd.addColorStop(0.35, 'rgba(255,255,255,.4)');
+        grd.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = grd;
+        g.fillRect(0, 0, 64, 64);
+        return new THREE.CanvasTexture(c);
+      })();
+      var glowMats = {};
+      function glowMatFor(col) {
+        if (!glowMats[col]) glowMats[col] = new THREE.SpriteMaterial({
+          map: glowTex, color: col, transparent: true, opacity: 0.35,
+          blending: THREE.AdditiveBlending, depthWrite: false
+        });
+        return glowMats[col];
+      }
+
+      var PALETTE = [0x39f6ff, 0x7fbfff, 0xa06bff, 0x5cff9d, 0xffb347];
+
+      function spawnMeteor() {
+        if (meteors.length > 46) return;
+        var r = 0.6 + Math.random() * 0.8;
+        var geo = meteorGeo(r);
+        var col = PALETTE[(Math.random() * PALETTE.length) | 0];
+        var mat = new THREE.MeshStandardMaterial({
+          color: 0x0a1620, emissive: col, emissiveIntensity: 0.55,
+          metalness: 0.4, roughness: 0.4, flatShading: true
+        });
+        var m = new THREE.Mesh(geo, mat);
+        m.position.set(
+          (Math.random() * 2 - 1) * (ARENA_X - r),
+          12 + Math.random() * 5,
+          ARENA_Z_MIN + Math.random() * (ARENA_Z_MAX - ARENA_Z_MIN)
+        );
+
+        // 地面投影环：3D 里判断「离得多近 / 落在哪」的关键线索
+        var ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({
+          color: col, transparent: true, opacity: 0.45, side: THREE.DoubleSide, depthWrite: false
+        }));
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.set(m.position.x, 0.04, m.position.z);
+        ring.scale.setScalar(r * 1.7);
+        scene.add(ring);
+
+        var glow = new THREE.Sprite(glowMatFor(col));
+        glow.scale.setScalar(r * 5);
+        glow.position.copy(m.position);
+        scene.add(glow);
+
+        m.userData = {
+          r: r, vy: -(7.5 + Math.random() * 4.0), hp: Math.ceil(r * 2),
+          grazeCd: 0, spin: (Math.random() - 0.5) * 2.2,
+          ring: ring, glow: glow
+        };
+        scene.add(m);
+        meteors.push(m);
+      }
+
+      /* ==================== 子弹 ==================== */
+      var bullets = [];
+      var bulletGeo = new THREE.SphereGeometry(0.16, 6, 6);
+      var bulletMat = new THREE.MeshBasicMaterial({ color: 0x8ff6ff });
+
+      function fireAt(point) {
+        var b = new THREE.Mesh(bulletGeo, bulletMat);
+        b.position.copy(ship.position);
+        var dir = new THREE.Vector3().subVectors(point, ship.position).normalize();
+        b.userData = { dir: dir, speed: 42, life: 1.4 };
+        scene.add(b);
+        bullets.push(b);
+      }
+
+      /* ==================== 粒子 ==================== */
+      var particles = null;
+      var P_MAX = 420;
+      function initParticles() {
+        var g = new THREE.BufferGeometry();
+        var pos = new Float32Array(P_MAX * 3);
+        var col = new Float32Array(P_MAX * 3);
+        g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        particles = new THREE.Points(g, new THREE.PointsMaterial({
+          size: 0.42, vertexColors: true, transparent: true, opacity: 0.95,
+          blending: THREE.AdditiveBlending, depthWrite: false
+        }));
+        particles.userData = { v: [], life: [] };
+        for (var i = 0; i < P_MAX; i++) {
+          particles.userData.v.push(new THREE.Vector3());
+          particles.userData.life.push(0);
+        }
+        scene.add(particles);
+      }
+
+      var pIdx = 0;
+      function burstAt(pos, color, n, power) {
+        var c = new THREE.Color(color);
+        var posAttr = particles.geometry.attributes.position;
+        var colAttr = particles.geometry.attributes.color;
+        for (var i = 0; i < n; i++) {
+          var idx = pIdx % P_MAX; pIdx++;
+          posAttr.setXYZ(idx, pos.x, pos.y, pos.z);
+          colAttr.setXYZ(idx, c.r, c.g, c.b);
+          particles.userData.v[idx].set(
+            (Math.random() - 0.5) * power,
+            Math.random() * power * 0.8,
+            (Math.random() - 0.5) * power
+          );
+          particles.userData.life[idx] = 0.5 + Math.random() * 0.5;
+        }
+        posAttr.needsUpdate = true;
+        colAttr.needsUpdate = true;
+      }
+
+      function updateParticles(dt) {
+        var posAttr = particles.geometry.attributes.position;
+        var v = particles.userData.v, life = particles.userData.life;
+        var any = false;
+        for (var i = 0; i < P_MAX; i++) {
+          if (life[i] <= 0) continue;
+          life[i] -= dt;
+          var p = v[i];
+          posAttr.setXYZ(
+            i,
+            posAttr.getX(i) + p.x * dt,
+            posAttr.getY(i) + p.y * dt,
+            posAttr.getZ(i) + p.z * dt
+          );
+          p.y -= 9 * dt;
+          if (life[i] <= 0) posAttr.setXYZ(i, 0, -999, 0);
+          any = true;
+        }
+        if (any) posAttr.needsUpdate = true;
+      }
+
+      /* ==================== 状态 ==================== */
+      var game = {
+        score: 0, kills: 0, life: 3, danger: 0, burstT: 0,
+        invuln: 0, time: 0, over: false, started: false,
+        spawnT: 0, fireT: 0, shake: 0, lastMult: 1
+      };
+
+      var keys = {};
+      var target = new THREE.Vector3(0, SHIP_Y, 2);
+      var havePointer = false;
+      var raycaster = new THREE.Raycaster();
+      var plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -SHIP_Y);
+      var ndc = new THREE.Vector2();
+
+      /* ==================== 输入 ==================== */
+      window.addEventListener('keydown', function (e) {
+        keys[e.code] = true;
+        if (e.code === 'Space') { e.preventDefault(); }
+        if (!game.started && (e.code === 'Space' || e.code === 'Enter')) start();
+      });
+      window.addEventListener('keyup', function (e) { keys[e.code] = false; });
+
+      renderer.domElement.addEventListener('pointermove', function (e) {
+        ndc.x = (e.clientX / window.innerWidth) * 2 - 1;
+        ndc.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(ndc, camera);
+        var hit = new THREE.Vector3();
+        if (raycaster.ray.intersectPlane(plane, hit)) {
+          target.copy(hit);
+          target.x = Math.max(-ARENA_X, Math.min(ARENA_X, target.x));
+          target.z = Math.max(ARENA_Z_MIN, Math.min(ARENA_Z_MAX, target.z));
+          havePointer = true;
+        }
+      });
+
+      document.getElementById('again').addEventListener('click', function () { reset(); start(); });
+
+      /* ==================== 距离与倍率 ==================== */
+      function surfaceDist(m) {
+        return Math.max(0, ship.position.distanceTo(m.position) - m.userData.r - SHIP_R);
+      }
+      function multOf(d) {
+        if (d <= RANGE_NEAR) return 1.5;
+        if (d <= RANGE_FAR) return 1.2;
+        return 1.0;
+      }
+
+      function nearestMeteor(maxRange) {
+        var best = null, bd = Infinity;
+        for (var i = 0; i < meteors.length; i++) {
+          var d = surfaceDist(meteors[i]);
+          if (d < bd && d <= maxRange) { bd = d; best = meteors[i]; }
+        }
+        return best;
+      }
+
+      /* ==================== 危险值 ==================== */
+      function addDanger(v) {
+        if (game.burstT > 0) return;
+        game.danger = Math.min(DANGER_MAX, game.danger + v);
+        if (game.danger >= DANGER_MAX) releaseDanger();
+      }
+      function releaseDanger() {
+        if (game.burstT > 0) return;
+        game.burstT = BURST_DUR;
+        game.danger = DANGER_MAX;
+        game.shake = 1.1;
+        burstAt(ship.position, 0xff2b3d, 60, 16);
+        burstAt(ship.position, 0xffffff, 20, 9);
+      }
+
+      /* ==================== 主循环 ==================== */
+      var lastT = performance.now();
+      var fpsAcc = 0, fpsCount = 0, fpsEl = document.getElementById('fps');
+
+      function loop(now) {
+        var dt = Math.min(0.05, (now - lastT) / 1000);
+        lastT = now;
+        update(dt);
+        renderer.render(scene, camera);
+
+        fpsAcc += dt; fpsCount++;
+        if (fpsAcc > 0.5) {
+          fpsEl.textContent = '3D 原型 · FPS ' + Math.round(fpsCount / fpsAcc);
+          fpsAcc = 0; fpsCount = 0;
+        }
+        requestAnimationFrame(loop);
+      }
+
+      function update(dt) {
+        if (game.started && !game.over) {
+          game.time += dt;
+          if (game.burstT > 0) {
+            game.burstT = Math.max(0, game.burstT - dt);
+            game.danger = DANGER_MAX * (game.burstT / BURST_DUR);
+            if (game.burstT <= 0) game.danger = 0;
+          }
+          moveShip(dt);
+          spawnLogic(dt);
+          updateMeteors(dt);
+          updateBullets(dt);
+          autoFire(dt);
+          grazeLogic(dt);
+        }
+        updateParticles(dt);
+        updateCamera(dt);
+        updateHud();
+      }
+
+      function moveShip(dt) {
+        var kx = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0);
+        var kz = (keys.KeyS || keys.ArrowDown ? 1 : 0) - (keys.KeyW || keys.ArrowUp ? 1 : 0);
+        var speed = 20;
+        var mv = new THREE.Vector3();
+
+        if (kx !== 0 || kz !== 0) {
+          mv.set(kx, 0, kz).normalize().multiplyScalar(speed * dt);
+          ship.position.add(mv);
+          target.copy(ship.position);
+        } else if (havePointer) {
+          var d = new THREE.Vector3().subVectors(target, ship.position);
+          d.y = 0;
+          var len = d.length();
+          if (len > 0.08) {
+            d.multiplyScalar(Math.min(speed * dt, len) / len);
+            ship.position.add(d);
+          }
+        }
+        ship.position.x = Math.max(-ARENA_X, Math.min(ARENA_X, ship.position.x));
+        ship.position.z = Math.max(ARENA_Z_MIN, Math.min(ARENA_Z_MAX, ship.position.z));
+        ship.position.y = SHIP_Y;
+
+        ship.rotation.z = (ship.position.x - target.x) * -0.05;
+        ship.rotation.y = (target.x - ship.position.x) * 0.04;
+
+        // 爆发时飞船变红
+        var hot = game.burstT > 0;
+        hullMat.emissive.setHex(hot ? 0xff2b3d : 0x39f6ff);
+        wingMat.emissive.setHex(hot ? 0xff2b3d : 0x39f6ff);
+        auraMesh.material.color.setHex(hot ? 0xff2b3d : 0x39f6ff);
+        auraMesh.rotation.z += dt * (hot ? 4 : 1.2);
+        shipLight.color.setHex(hot ? 0xff2b3d : 0x39f6ff);
+        shipLight.position.copy(ship.position).setY(SHIP_Y + 1.2);
+
+        // 受伤闪烁
+        if (game.invuln > 0) {
+          game.invuln -= dt;
+          hullMat.emissiveIntensity = 1.1 + Math.sin(performance.now() / 60) * 0.9;
+        } else hullMat.emissiveIntensity = 1.1;
+      }
+
+      function spawnLogic(dt) {
+        game.spawnT -= dt;
+        if (game.spawnT <= 0) {
+          spawnMeteor();
+          var rate = Math.max(0.13, 0.30 - game.time * 0.0016);
+          game.spawnT = rate * (0.75 + Math.random() * 0.5);
+        }
+      }
+
+      function updateMeteors(dt) {
+        for (var i = meteors.length - 1; i >= 0; i--) {
+          var m = meteors[i];
+          var ud = m.userData;
+          m.position.y += ud.vy * dt;
+          m.rotation.x += ud.spin * dt;
+          m.rotation.y += ud.spin * 0.7 * dt;
+
+          if (ud.glow) ud.glow.position.copy(m.position);
+          if (ud.ring) {
+            var hk = Math.max(0, Math.min(1, m.position.y / 17));
+            var near = (ship.position.distanceTo(m.position) - ud.r - SHIP_R) <= RANGE_NEAR;
+            // 进入贴脸范围：地面环变金色并呼吸，这是 3D 里唯一可靠的「距离」语言
+            ud.ring.material.color.setHex(near ? 0xffd166 : m.material.emissive.getHex());
+            ud.ring.material.opacity = near
+              ? 0.65 + Math.sin(performance.now() / 90) * 0.3
+              : 0.15 + (1 - hk) * 0.5;
+            ud.ring.scale.setScalar(ud.r * (1.7 + hk * 0.9));
+          }
+
+          // 撞击飞船
+          if (game.invuln <= 0 && ship.position.distanceTo(m.position) < ud.r + SHIP_R) {
+            hitShip();
+            m.position.y = -6;
+          }
+          // 落地
+          if (m.position.y < 0.4) {
+            burstAt(m.position, m.material.emissive.getHex(), 10, 6);
+            game.shake = Math.max(game.shake, 0.28);
+            disposeMeteor(m);
+            meteors.splice(i, 1);
+          }
+        }
+      }
+
+      function updateBullets(dt) {
+        for (var i = bullets.length - 1; i >= 0; i--) {
+          var b = bullets[i];
+          var ud = b.userData;
+          b.position.addScaledVector(ud.dir, ud.speed * dt);
+          ud.life -= dt;
+
+          var hitSomething = false;
+          for (var j = meteors.length - 1; j >= 0; j--) {
+            var m = meteors[j];
+            if (b.position.distanceTo(m.position) < m.userData.r + 0.22) {
+              var d = surfaceDist(m);
+              var mult = multOf(d) * (game.burstT > 0 ? 2 : 1);
+              m.userData.hp -= 2 * mult;
+              burstAt(b.position, m.material.emissive.getHex(), 4, 4);
+              if (m.userData.hp <= 0) {
+                killMeteor(j, d, mult);
+              }
+              hitSomething = true;
+              break;
+            }
+          }
+          if (hitSomething || ud.life <= 0) {
+            scene.remove(b);
+            bullets.splice(i, 1);
+          }
+        }
+      }
+
+      function killMeteor(idx, d, mult) {
+        var m = meteors[idx];
+        game.kills++;
+        if (d <= RANGE_NEAR) game.nearKills = (game.nearKills || 0) + 1;
+        var base = 10;
+        game.score += Math.round(base * mult * (game.burstT > 0 ? 2 : 1));
+        burstAt(m.position, m.material.emissive.getHex(), 14, 8);
+        disposeMeteor(m);
+        meteors.splice(idx, 1);
+        addDanger(d <= RANGE_NEAR ? 6 : 2);
+        game.shake = Math.max(game.shake, d <= RANGE_NEAR ? 0.32 : 0.14);
+      }
+
+      function disposeMeteor(m) {
+        scene.remove(m);
+        m.material.dispose();
+        if (m.userData.ring) { scene.remove(m.userData.ring); m.userData.ring.material.dispose(); }
+        if (m.userData.glow) scene.remove(m.userData.glow);
+      }
+
+      function autoFire(dt) {
+        game.fireT -= dt;
+        if (game.fireT > 0) return;
+        var t = nearestMeteor(20);
+        if (!t) return;
+        game.fireT = FIRE_INTERVAL;
+        // 提前量：陨石在子弹飞行期间会继续下落
+        var dist = ship.position.distanceTo(t.position);
+        var tt = dist / 42;
+        var aim = t.position.clone();
+        aim.y += t.userData.vy * tt;
+        fireAt(aim);
+      }
+
+      function grazeLogic(dt) {
+        var near = false;
+        for (var i = 0; i < meteors.length; i++) {
+          var m = meteors[i];
+          var d = surfaceDist(m);
+          if (m.userData.grazeCd > 0) m.userData.grazeCd -= dt;
+          if (d <= 1.7 && m.userData.grazeCd <= 0) {
+            m.userData.grazeCd = 1.2;
+            addDanger(7);
+            burstAt(m.position, 0xffffff, 3, 3);
+            game.shake = Math.max(game.shake, 0.18);
+          }
+          if (d <= RANGE_NEAR) near = true;
+        }
+        game.lastMult = multOf(nearestDist());
+        if (near) addDanger(3 * dt);
+      }
+
+      function nearestDist() {
+        var best = Infinity;
+        for (var i = 0; i < meteors.length; i++) {
+          var d = surfaceDist(meteors[i]);
+          if (d < best) best = d;
+        }
+        return best;
+      }
+
+      function hitShip() {
+        game.life--;
+        game.invuln = 1.4;
+        game.danger = Math.max(0, game.danger - 35);
+        game.shake = 1.2;
+        burstAt(ship.position, 0xff3355, 26, 12);
+        if (game.life <= 0) gameOver();
+      }
+
+      var CAM = { y: 7.5, z: 15, lookY: 3.2, lookZ: -7 };
+
+      function updateCamera(dt) {
+        var sway = new THREE.Vector3(ship.position.x * 0.22, 0, 0);
+        // 镜头压低往前上方看：天上来物与地面都能入画
+        var desired = new THREE.Vector3(0, CAM.y, CAM.z).add(sway);
+        camera.position.lerp(desired, 1 - Math.pow(0.001, dt));
+
+        camLook.lerp(new THREE.Vector3(ship.position.x * 0.3, CAM.lookY, ship.position.z + CAM.lookZ), 1 - Math.pow(0.002, dt));
+        camera.lookAt(camLook);
+
+        if (game.shake > 0.001) {
+          game.shake *= Math.pow(0.02, dt);
+          camera.position.x += (Math.random() - 0.5) * game.shake;
+          camera.position.y += (Math.random() - 0.5) * game.shake;
+          camera.rotation.z += (Math.random() - 0.5) * game.shake * 0.02;
+        }
+      }
+
+      /* ==================== HUD ==================== */
+      var elScore = document.getElementById('score');
+      var elLife = document.getElementById('life');
+      var elKill = document.getElementById('kill');
+      var elMult = document.getElementById('mult');
+      var elFill = document.getElementById('lvFill');
+      var elNum = document.getElementById('lvNum');
+
+      function updateHud() {
+        elScore.textContent = game.score;
+        elLife.textContent = Math.max(0, game.life);
+        elKill.textContent = game.kills;
+
+        var m = game.burstT > 0 ? 2 : game.lastMult;
+        elMult.textContent = '×' + m.toFixed(1) + (m >= 1.5 ? '　贴脸中' : '');
+        elMult.style.color = m >= 2 ? '#ff5c7a' : m >= 1.5 ? '#ffd166' : m >= 1.2 ? '#8ff6ff' : 'rgba(160,210,235,.5)';
+
+        elFill.style.width = (game.danger / DANGER_MAX * 100) + '%';
+        elFill.classList.toggle('hot', game.burstT > 0);
+        elNum.textContent = Math.round(game.danger);
+      }
+
+      /* ==================== 流程 ==================== */
+      var hintEl = document.getElementById('hint');
+      var overEl = document.getElementById('over');
+
+      function start() {
+        game.started = true;
+        hintEl.style.opacity = '0';
+      }
+
+      function gameOver() {
+        game.over = true;
+        document.getElementById('finalScore').textContent = game.score;
+        document.getElementById('finalSub').innerHTML =
+          '存活 ' + game.time.toFixed(1) + 's · 击碎 ' + game.kills + ' 颗<br>' +
+          '贴脸击杀占比 <span style="color:#ffd166">' + (game.kills ? Math.round(game.nearKills / game.kills * 100) : 0) + '%</span>';
+        overEl.style.display = 'flex';
+      }
+
+      function reset() {
+        while (meteors.length) { disposeMeteor(meteors.pop()); }
+        while (bullets.length) { var b = bullets.pop(); scene.remove(b); }
+        game.score = 0; game.kills = 0; game.nearKills = 0; game.life = 3;
+        game.danger = 0; game.burstT = 0; game.invuln = 0; game.time = 0;
+        game.over = false; game.spawnT = 0; game.fireT = 0; game.shake = 0;
+        ship.position.set(0, SHIP_Y, 2);
+        target.copy(ship.position);
+        overEl.style.display = 'none';
+      }
+
+      /* ==================== 尺寸 ==================== */
+      function resize() {
+        var w = window.innerWidth, h = window.innerHeight;
+        renderer.setSize(w, h, false);
+        renderer.domElement.style.width = w + 'px';
+        renderer.domElement.style.height = h + 'px';
+        camera.aspect = w / h;
+        // 绛屏（手机）：拉远 + 加广角，否则场地两侧会被切掉
+        if (camera.aspect >= 1) { camera.fov = 56; CAM.y = 7.5; CAM.z = 15; CAM.lookY = 3.2; CAM.lookZ = -7; }
+        else { camera.fov = 80; CAM.y = 11; CAM.z = 27; CAM.lookY = 4.5; CAM.lookZ = -9; }
+        camera.updateProjectionMatrix();
+      }
+      window.addEventListener('resize', resize);
+
+      /* ==================== 启动 ==================== */
+      initParticles();
+      resize();
+      ship.position.set(0, SHIP_Y, 2);
+      target.copy(ship.position);
+      requestAnimationFrame(loop);
+
+      // 暴露给自动化测试
+      window.__proto = { game: game, meteors: meteors, ship: ship, start: start, releaseDanger: releaseDanger };
+    })();
+  </script>
+</body>
+
+</html>
