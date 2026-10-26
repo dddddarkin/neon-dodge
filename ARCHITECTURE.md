@@ -9,7 +9,7 @@
 | `index.html` | ~72 | 页面骨架：canvas、HUD、底部栏、script 加载顺序 |
 | `style.css` | ~960 | 全部样式（含手机适配、`env(safe-area-inset)`） |
 | `audio.js` | ~646 | **音频模块**：程序化音乐（9 套风格）+ 全部音效，导出全局 `Sound` |
-| `game.js` | ~6536 | 其余全部：状态、更新、渲染、UI 面板、存档、调试 |
+| `game.js` | ~6511 | 其余全部：状态、更新、渲染、UI 面板、存档、调试 |
 | `worker/` | — | Cloudflare Worker 排行榜后端源码（**当前未启用**，国内 DNS 被污染） |
 | `CHANGELOG.md` | — | 每个版本的改动记录 |
 
@@ -67,10 +67,10 @@ player          // 玩家状态
 ## 坐标系统（v4.9.0 起）
 
 ```
-LOGICAL_H   = 844                          // 逻辑高度固定
-LOGICAL_W_MIN = 390, LOGICAL_W_MAX = 780   // 逻辑宽度可变（宽屏最多 2 倍）
+LOGICAL_H   = 844                            // 逻辑高度固定
+LOGICAL_W_MIN = 390, LOGICAL_W_MAX = 1170    // 逻辑宽度可变（宽屏最多 3 倍）
 vScale  = min(vh / LOGICAL_H, vw / LOGICAL_W_MIN)
-W       = clamp(vw / vScale, 390, 780)     // 全文所有 W/H 都是逻辑尺寸
+W       = clamp(vw / vScale, 390, 1170)      // 全文所有 W/H 都是逻辑尺寸
 H       = LOGICAL_H
 vOffX   = (vw - W * vScale) / 2            // 黑边左缘
 widthMul = W / 390                         // 陨石密度补偿系数
@@ -99,7 +99,7 @@ widthMul = W / 390                         // 陨石密度补偿系数
 
 - **手机**：连点右下角版本号 5 次 → 暗号 `080825`（解锁后点 3 次开关面板）
 - **桌面**：`?debug=1` 或按 `` ` ``
-- 面板含：材料 +500 / 无敌 / 一击必碎 / 伤害倍率 / 刷各类敌人 / **→ 处决特写** / 跳波次
+- 面板含：材料 +500 / **场地宽度（390/780/1170/1500 实时切换）** / 无敌 / 一击必碎 / 伤害倍率 / 刷各类敌人 / **→ 处决特写** / 跳波次
 - `?mod=gale` 可预览任意每日词缀
 
 ## 代码约定

@@ -242,9 +242,9 @@
       var canvas = document.getElementById('game');
       var ctx = canvas.getContext('2d', { alpha: false });
       var W = 1, H = 1, dpr = 1;
-      // 逻辑画布：高度固定 844；宽度随屏幕变宽（390 ~ 780），既保竖屏通道感又利用宽屏
+      // 逻辑画布：高度固定 844；宽度随屏幕变宽（390 ~ 1170），既保竖屏通道感又利用宽屏
       var LOGICAL_H = 844;
-      var LOGICAL_W_MIN = 390, LOGICAL_W_MAX = 780;
+      var LOGICAL_W_MIN = 390, LOGICAL_W_MAX = 1170;   // 宽屏最多 3 倍宽（约 1.39:1）
       var vScale = 1, vOffX = 0, vOffY = 0;
       var widthMul = 1;   // = W / 390，陨石密度补偿系数
       var bgGrad = null, vignette = null;
@@ -1054,7 +1054,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v5.0.0';
+      verEl.textContent = 'v5.1.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -2471,41 +2471,6 @@
         }
       }
 
-      function director(wdt) {
-        if (!game.boss && game.time > game.nextBoss) {
-          spawnBoss();
-          game.nextBoss = game.time + 80;
-          return;
-        }
-        if (game.boss) return;
-
-        game.phaseT -= wdt;
-        if (game.phaseT <= 0) {
-          if (game.phase === 'calm') {
-            beginEvent();
-          } else {
-            game.phase = 'calm';
-            game.eventType = '';
-            game.phaseT = rand(3.4, 5.0);
-          }
-        }
-
-        if (game.phase === 'event') updateEvent(wdt);
-
-        game.spawnT -= wdt;
-        if (game.spawnT <= 0) {
-          spawnMeteor();
-          if (game.time > 20 && Math.random() < 0.28) spawnMeteor();
-          var rate = Math.max(0.22, 0.95 - game.time * 0.011);
-          game.spawnT = rate * rand(0.75, 1.3) * (game.phase === 'event' ? 0.65 : 1);
-        }
-
-        game.orbT -= wdt;
-        if (game.orbT <= 0) { spawnOrb(); game.orbT = rand(2.0, 3.4); }
-
-        game.powerT -= wdt;
-        if (game.powerT <= 0) { spawnPickup(); game.powerT = rand(9.5, 15); }
-      }
           /* ==================== 武器表 ==================== */
 
   var WEAPON_DEFS = {
@@ -3438,7 +3403,7 @@
         game.waveSpawned += 1;
         spawnWaveEnemy();
         var base = WAVE_TIME / Math.max(1, game.waveBudget);
-        game.spawnT = Math.max(0.13, base) * rand(0.8, 1.25);
+        game.spawnT = Math.max(0.13 / widthMul, base) * rand(0.8, 1.25);
       }
     }
 
@@ -6258,6 +6223,14 @@
       if (game.shopOpen) renderShop();
     });
 
+    addBtn('场地宽度：' + LOGICAL_W_MAX, 'dbgWidth', function () {
+      var opts = [390, 780, 1170, 1500];
+      var i = opts.indexOf(LOGICAL_W_MAX);
+      LOGICAL_W_MAX = opts[(i + 1) % opts.length];
+      resize();
+      debugSync();
+    });
+
     addBtn('无敌：关', 'dbgInv', function () {
       game.debugInv = !game.debugInv;
       debugSync();
@@ -6428,6 +6401,8 @@
 
   function debugSync() {
     var a = document.getElementById('dbgInv');
+    var wm = document.getElementById('dbgWidth');
+    if (wm) wm.textContent = '场地宽度：' + LOGICAL_W_MAX + 'px';
     var b = document.getElementById('dbgOne');
     var c = document.getElementById('dbgSpd');
     if (a) a.textContent = '无敌：' + (game.debugInv ? '开' : '关');
