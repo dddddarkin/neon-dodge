@@ -242,9 +242,11 @@
       var canvas = document.getElementById('game');
       var ctx = canvas.getContext('2d', { alpha: false });
       var W = 1, H = 1, dpr = 1;
-      // 逻辑画布固定为手机参考尺寸；世界坐标从此与屏幕物理尺寸解耦
-      var LOGICAL_W = 390, LOGICAL_H = 844;
+      // 逻辑画布：高度固定 844；宽度随屏幕变宽（390 ~ 780），既保竖屏通道感又利用宽屏
+      var LOGICAL_H = 844;
+      var LOGICAL_W_MIN = 390, LOGICAL_W_MAX = 780;
       var vScale = 1, vOffX = 0, vOffY = 0;
+      var widthMul = 1;   // = W / 390，陨石密度补偿系数
       var bgGrad = null, vignette = null;
 
       function buildBg() {
@@ -266,12 +268,13 @@
         canvas.height = Math.round(vh * dpr);
         canvas.style.width = vw + 'px';
         canvas.style.height = vh + 'px';
-        // 等比缩放 + 居中：宽屏出黑边，竖屏几乎无黑边
-        vScale = Math.min(vw / LOGICAL_W, vh / LOGICAL_H);
-        vOffX = (vw - LOGICAL_W * vScale) / 2;
-        vOffY = (vh - LOGICAL_H * vScale) / 2;
-        W = LOGICAL_W;
+        // 高度永远铺满；宽度按屏幕变宽（最多 2 倍），多出来的出黑边
+        vScale = Math.min(vh / LOGICAL_H, vw / LOGICAL_W_MIN);
+        W = Math.max(LOGICAL_W_MIN, Math.min(LOGICAL_W_MAX, vw / vScale));
         H = LOGICAL_H;
+        vOffX = (vw - W * vScale) / 2;
+        vOffY = (vh - H * vScale) / 2;
+        widthMul = W / LOGICAL_W_MIN;
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         layoutStage();
         buildBg();
@@ -281,7 +284,7 @@
 
       // 把顶部 HUD / 底栏收进居中舞台，避免宽屏下贴到显示器边缘
       function layoutStage() {
-        var sw = Math.round(LOGICAL_W * vScale) + 'px';
+        var sw = Math.round(W * vScale) + 'px';
         var sx = Math.round(vOffX) + 'px';
         ['hud', 'bottom'].forEach(function (id) {
           var el = document.getElementById(id);
@@ -1051,7 +1054,7 @@
 
       var verEl = document.createElement('div');
       verEl.id = 'verEl';
-      verEl.textContent = 'v4.9.0';
+      verEl.textContent = 'v5.0.0';
       verEl.style.cssText = 'position:fixed;right:10px;bottom:8px;font-size:10px;letter-spacing:.1em;color:rgba(140,200,220,.3);pointer-events:auto;z-index:99;font-variant-numeric:tabular-nums;touch-action:manipulation;-webkit-tap-highlight-color:transparent;';
       document.body.appendChild(verEl);
 
@@ -3301,7 +3304,9 @@
     game.bossSpawned = false;
     game.spawnT = 0.6;
 
-    game.waveBudget = Math.min(84, Math.round((14 + game.wave * 4) * (1 + game.threatBonus)));
+    // 密度补偿：场地越宽，同波生成数量越多，保证每秒贴脸机会与手机上一致
+    game.waveBudget = Math.min(Math.round(84 * widthMul),
+      Math.round((14 + game.wave * 4) * (1 + game.threatBonus) * widthMul));
     game.waveGoal = Math.ceil(game.waveBudget * 0.6);
 
     player.invuln = Math.max(player.invuln, 1.0);

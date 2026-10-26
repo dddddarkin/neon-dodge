@@ -9,7 +9,7 @@
 | `index.html` | ~72 | 页面骨架：canvas、HUD、底部栏、script 加载顺序 |
 | `style.css` | ~960 | 全部样式（含手机适配、`env(safe-area-inset)`） |
 | `audio.js` | ~646 | **音频模块**：程序化音乐（9 套风格）+ 全部音效，导出全局 `Sound` |
-| `game.js` | ~6531 | 其余全部：状态、更新、渲染、UI 面板、存档、调试 |
+| `game.js` | ~6536 | 其余全部：状态、更新、渲染、UI 面板、存档、调试 |
 | `worker/` | — | Cloudflare Worker 排行榜后端源码（**当前未启用**，国内 DNS 被污染） |
 | `CHANGELOG.md` | — | 每个版本的改动记录 |
 
@@ -67,11 +67,17 @@ player          // 玩家状态
 ## 坐标系统（v4.9.0 起）
 
 ```
-LOGICAL_W = 390, LOGICAL_H = 844   // 逻辑画布，等价于手机参考尺寸
-vScale = min(vw / LOGICAL_W, vh / LOGICAL_H)
-vOffX  = (vw - LOGICAL_W * vScale) / 2   // 黑边左缘
-W = LOGICAL_W, H = LOGICAL_H             // 全文所有 W/H 都是逻辑尺寸
+LOGICAL_H   = 844                          // 逻辑高度固定
+LOGICAL_W_MIN = 390, LOGICAL_W_MAX = 780   // 逻辑宽度可变（宽屏最多 2 倍）
+vScale  = min(vh / LOGICAL_H, vw / LOGICAL_W_MIN)
+W       = clamp(vw / vScale, 390, 780)     // 全文所有 W/H 都是逻辑尺寸
+H       = LOGICAL_H
+vOffX   = (vw - W * vScale) / 2            // 黑边左缘
+widthMul = W / 390                         // 陨石密度补偿系数
 ```
+
+**密度补偿是一条平衡铁律**：任何「按数量生成」的东西（`waveBudget` 等）都必须乘 `widthMul`，
+否则场地变宽就等于凭空变简单。按时间/概率生成的东西不用乘。
 
 **一条铁律**：任何从事件里拿到的坐标都是「屏幕坐标」，进世界前必须换算。
 
